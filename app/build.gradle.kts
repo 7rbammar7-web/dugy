@@ -10,16 +10,39 @@ if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
 
+fun installedNdkVersion(): String? {
+    val sdk = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT") ?: return null
+    val versions = File(sdk, "ndk").listFiles()
+        ?.filter { File(it, "source.properties").isFile }
+        ?.map { it.name }
+        ?: return null
+    return versions.maxWithOrNull(
+        compareBy<String>(
+            { it.split(".").getOrNull(0)?.toIntOrNull() ?: 0 },
+            { it.split(".").getOrNull(1)?.toIntOrNull() ?: 0 },
+            { it.split(".").getOrNull(2)?.toIntOrNull() ?: 0 },
+        )
+    )
+}
+
 android {
     namespace = "app.dugy"
     compileSdk = 35
+    // أداة NDK مطلوبة لتنحيف مكتبات libsignal (بدونها يصل حجم التطبيق إلى أكثر من 1 غيغابايت).
+    // نستخدم أحدث نسخة مثبّتة على جهاز البناء بدل نسخة ثابتة قد لا تكون موجودة.
+    installedNdkVersion()?.let { ndkVersion = it }
 
     defaultConfig {
         applicationId = "app.dugy.messenger"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
+
+        // معالجات الهواتف فقط؛ نسخ المحاكيات (x86) تضاعف الحجم بلا فائدة.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {
@@ -53,6 +76,8 @@ android {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         // مكتبات libsignal لأنظمة الحاسوب غير لازمة داخل تطبيق أندرويد.
         resources.excludes += setOf("libsignal_jni*.dylib", "signal_jni*.dll", "libsignal_jni*.so")
+        // نسخة الاختبار من libsignal لا يحتاجها التطبيق، وحجمها وحدها أكبر من 130 ميغابايت لكل معالج.
+        jniLibs.excludes += "**/libsignal_jni_testing.so"
     }
 
     testOptions {
