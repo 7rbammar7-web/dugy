@@ -43,6 +43,12 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        // مكتبات libsignal لأنظمة الحاسوب غير لازمة داخل تطبيق أندرويد.
+        resources.excludes += setOf("libsignal_jni*.dylib", "signal_jni*.dll", "libsignal_jni*.so")
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 }
 
@@ -63,6 +69,13 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-process:2.8.7")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    // التشفير الطرفي: مكتبة Signal الرسمية (بروتوكول PQXDH + Double Ratchet). الترخيص AGPL-3.0.
+    val libsignal = "0.106.1"
+    implementation("org.signal:libsignal-android:$libsignal")
+    implementation("org.signal:libsignal-client:$libsignal")
+
+    testImplementation("junit:junit:4.13.2")
 
     // لا توجد مكتبات تحليلات أو تقارير أعطال عمدًا (المتطلب 9 من معايير القبول).
 }
