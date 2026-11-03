@@ -2,9 +2,8 @@ package app.dugy
 
 import android.content.Context
 import app.dugy.data.ChatRepository
-import app.dugy.data.MessageTransport
-import app.dugy.data.PrototypeTransport
 import app.dugy.data.SettingsStore
+import app.dugy.net.Messenger
 import app.dugy.security.LockManager
 import app.dugy.security.Vault
 import kotlinx.coroutines.CoroutineScope
@@ -20,8 +19,8 @@ class AppContainer(context: Context) {
     val vault = Vault(appContext)
     val repository = ChatRepository(appContext, appScope)
 
-    /** يُستبدل في المرحلة الثانية بتنفيذ يعتمد بروتوكول تشفير طرفي معتمد. */
-    val transport: MessageTransport = PrototypeTransport()
+    /** المراسلة المشفّرة طرفيًا عبر الخادم. */
+    val messenger = Messenger(appContext, appScope, repository, settings)
 
-    val lockManager = LockManager(settings, vault, repository)
+    val lockManager = LockManager(settings, vault, repository, messenger)
 }

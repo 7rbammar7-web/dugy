@@ -1,5 +1,8 @@
 package app.dugy.ui.components
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.outlined.CloudOff
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.foundation.layout.Arrangement
@@ -127,4 +130,30 @@ fun formatShort(epochMs: Long): String {
 fun formatCountdown(ms: Long): String {
     val totalSec = (ms + 999) / 1000
     return String.format(Locale.US, "%02d:%02d", totalSec / 60, totalSec % 60)
+}
+
+/** شريط حالة الاتصال: انقطاع الإنترنت أو تعذّر الوصول إلى صندوق الرسائل. */
+@Composable
+fun NetworkBanner(container: app.dugy.AppContainer, modifier: Modifier = Modifier) {
+    val online by container.messenger.connectivity.online.collectAsStateWithLifecycle()
+    val inboxError by container.messenger.inboxError.collectAsStateWithLifecycle()
+    val text = when {
+        !online -> "لا يوجد اتصال بالإنترنت. ستبقى الرسائل غير المرسلة هنا، ويمكنك إعادة إرسالها عند عودة الاتصال."
+        inboxError -> "تعذّر الوصول إلى الخادم لاستلام الرسائل. سيُعاد المحاولة تلقائيًا."
+        else -> return
+    }
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Outlined.CloudOff, contentDescription = null, modifier = Modifier.size(20.dp))
+            Text(text, style = MaterialTheme.typography.bodySmall)
+        }
+    }
 }

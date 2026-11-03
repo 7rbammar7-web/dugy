@@ -1,0 +1,51 @@
+rules_version = '2';
+
+// قواعد أمان قاعدة بيانات DUGY على Firebase.
+// الخادم لا يخزّن إلا مفاتيح عامة ورسائل مشفّرة تشفيرًا طرفيًا تُحذف بعد استلامها.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // اسم المستخدم -> معرّف الحساب. يُحجز مرة واحدة ولا يُعدّل.
+    match /usernames/{name} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && name.matches('^[a-z0-9_]{3,20}$')
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // المفاتيح العامة لكل مستخدم. يكتبها صاحبها فقط.
+    match /users/{uid} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create, update, delete: if signedIn() && request.auth.uid == uid;
+
+      // مفاتيح لمرة واحدة: يرفعها صاحبها، ويستهلكها (يحذفها) من يبدأ محادثة معه.
+      match /oneTimeKeys/{keyId} {
+        allow get, list: if signedIn();
+        allow create, update: if signedIn() && request.auth.uid == uid;
+        allow delete: if signedIn();
+      }
+    }
+
+    // صندوق الرسائل المشفّرة. يقرأ ويحذف صاحبه فقط، ويكتب فيه أي مستخدم باسمه الحقيقي.
+    match /inbox/{uid}/messages/{messageId} {
+      allow get, list, delete: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn()
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.body is bytes
+        && request.resource.data.body.size() < 65536;
+      allow update: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

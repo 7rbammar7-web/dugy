@@ -7,6 +7,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import app.dugy.data.ChatRepository
 import app.dugy.data.SettingsStore
+import app.dugy.net.Messenger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +22,7 @@ class LockManager(
     private val settings: SettingsStore,
     private val vault: Vault,
     private val repository: ChatRepository,
+    private val messenger: Messenger,
 ) : DefaultLifecycleObserver {
 
     private val _phase = MutableStateFlow(computePhase())
@@ -45,11 +47,13 @@ class LockManager(
     suspend fun onUnlocked() {
         repository.open(vault.currentKey())
         _phase.value = AppPhase.UNLOCKED
+        messenger.open(vault.currentKey())
     }
 
     fun lock() {
         handler.removeCallbacks(lockRunnable)
         if (_phase.value == AppPhase.UNLOCKED) {
+            messenger.close()
             repository.close()
             vault.lockMemory()
             _phase.value = AppPhase.LOCKED
@@ -59,6 +63,7 @@ class LockManager(
     /** مسح كل البيانات المحلية والمفاتيح، والعودة إلى البداية. */
     fun wipeEverything() {
         handler.removeCallbacks(lockRunnable)
+        messenger.wipe()
         repository.close()
         repository.deleteFiles()
         vault.wipe()

@@ -24,6 +24,7 @@ object StoreCodec {
             contact.put("id", c.contact.id)
             contact.put("name", c.contact.name)
             contact.put("handle", c.contact.handle)
+            contact.put("uid", c.contact.uid)
 
             val co = JSONObject()
             co.put("id", c.id)
@@ -66,6 +67,7 @@ object StoreCodec {
                     id = contact.getString("id"),
                     name = contact.getString("name"),
                     handle = contact.optString("handle", ""),
+                    uid = contact.optString("uid", ""),
                 ),
                 createdAt = co.getLong("createdAt"),
                 retentionMs = if (retention > 0) retention else null,

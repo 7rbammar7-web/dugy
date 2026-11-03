@@ -4,6 +4,12 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// إعداد Firebase يُقرأ من app/google-services.json إن وُجد. بدونه يُبنى التطبيق
+// وتبقى المراسلة معطّلة مع رسالة توضيحية داخل التطبيق.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "app.dugy"
     compileSdk = 35
@@ -12,8 +18,8 @@ android {
         applicationId = "app.dugy.messenger"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-prototype"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     buildTypes {
@@ -51,6 +57,12 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.all {
+            it.testLogging {
+                events("passed", "failed", "skipped")
+                exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            }
+        }
     }
 }
 
@@ -76,6 +88,12 @@ dependencies {
     val libsignal = "0.106.1"
     implementation("org.signal:libsignal-android:$libsignal")
     implementation("org.signal:libsignal-client:$libsignal")
+
+    // الخادم: Firebase (حسابات + قاعدة بيانات لتمرير الرسائل المشفّرة فقط).
+    implementation(platform("com.google.firebase:firebase-bom:34.0.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 

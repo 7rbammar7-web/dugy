@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!--
-        ملاحظة أمنية: هذا النموذج الأولي لا يطلب إذن INTERNET إطلاقًا،
-        فلا يستطيع إرسال أي بيانات خارج الجهاز. يُضاف الإذن في المرحلة الثانية
-        مع دمج التشفير الطرفي وخدمة الترحيل.
-    -->
+    <!-- الإنترنت لتمرير الرسائل المشفّرة طرفيًا فقط؛ لا تخرج من الجهاز نصوص صريحة. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 

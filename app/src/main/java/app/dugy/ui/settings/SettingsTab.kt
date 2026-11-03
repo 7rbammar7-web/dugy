@@ -51,7 +51,7 @@ import app.dugy.security.Vault
 import app.dugy.ui.components.ConfirmDialog
 import app.dugy.ui.components.findFragmentActivity
 
-private enum class PendingConfirm { FULL_PREVIEW, DISABLE_SECURE, ENABLE_WIPE, WIPE_ALL }
+private enum class PendingConfirm { FULL_PREVIEW, DISABLE_SECURE, ENABLE_WIPE, WIPE_ALL, SIGN_OUT }
 
 @Composable
 fun SettingsTab(
@@ -65,6 +65,7 @@ fun SettingsTab(
     val biometricEnabled by container.vault.biometricEnabled.collectAsStateWithLifecycle()
     val biometricAvailable = remember { BiometricAuth.isAvailable(context) }
     var confirm by remember { mutableStateOf<PendingConfirm?>(null) }
+    val account by container.messenger.account.collectAsStateWithLifecycle()
 
     fun toast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
 
@@ -95,10 +96,15 @@ fun SettingsTab(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("حالة هذا الإصدار", style = MaterialTheme.typography.titleSmall)
+                Text("حالة التشفير", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "نموذج أولي — لا يرسل رسائل مشفرة فعليًا. لا يملك التطبيق إذن الوصول إلى الإنترنت، " +
-                        "والرسائل تُحفظ مشفّرة على هذا الجهاز فقط. غير صالح لمحادثات حساسة.",
+                    "الرسائل مشفّرة تشفيرًا طرفيًا بمكتبة Signal الرسمية (libsignal) قبل خروجها من الجهاز. " +
+                        "الخادم يمرّر رسائل مشفّرة فقط ويحذفها بعد استلامها، لكنه يرى من يراسل من ومتى. " +
+                        "لم يخضع التطبيق بعد لمراجعة أمنية مستقلة.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    if (container.messenger.isConfigured) "الخادم: مُعدّ" else "الخادم: غير مُعدّ — المراسلة معطّلة",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 val storage = when (KeystoreCipher.masterIsStrongBox(context)) {
@@ -108,6 +114,22 @@ fun SettingsTab(
                 }
                 Text("مخزن المفاتيح: $storage", style = MaterialTheme.typography.bodySmall)
             }
+        }
+
+        // ---- الحساب ----
+        if (account != null) {
+            SectionTitle("الحساب")
+            ListItem(
+                headlineContent = { Text("@${account!!.username}") },
+                supportingContent = { Text("اسم المستخدم الذي يبحث به الآخرون عنك.") },
+            )
+            ListItem(
+                modifier = Modifier.clickable { confirm = PendingConfirm.SIGN_OUT },
+                headlineContent = { Text("تسجيل الخروج من هذا الجهاز", color = MaterialTheme.colorScheme.error) },
+                supportingContent = {
+                    Text("تُحذف مفاتيح التشفير من هذا الجهاز، فلن تستطيع قراءة ما يصل إليه بعد ذلك. تبقى المحادثات المحفوظة.")
+                },
+            )
         }
 
         // ---- القفل ----
@@ -250,6 +272,18 @@ fun SettingsTab(
     }
 
     when (confirm) {
+        PendingConfirm.SIGN_OUT -> ConfirmDialog(
+            title = "تسجيل الخروج؟",
+            body = "ستُحذف مفاتيح التشفير الخاصة بهذا الجهاز. عند الدخول من جديد تُولَّد مفاتيح جديدة، " +
+                "وسيرى من يراسلك تحذيرًا بأن مفتاحك تغيّر.",
+            confirmText = "تسجيل الخروج",
+            destructive = true,
+            onConfirm = {
+                container.messenger.signOut()
+                confirm = null
+            },
+            onDismiss = { confirm = null },
+        )
         PendingConfirm.FULL_PREVIEW -> ConfirmDialog(
             title = "إظهار نص الرسائل في الإشعارات؟",
             body = "سيظهر اسم المرسل ونص الرسالة في لوحة الإشعارات عندما يكون الهاتف مفتوحًا، " +

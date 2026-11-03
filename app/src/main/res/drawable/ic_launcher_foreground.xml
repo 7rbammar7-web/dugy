@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- شعار DUGY: فقاعة محادثة على شكل حرف D، في وسطها ثقب قفل. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -6,13 +7,8 @@
     android:viewportHeight="108">
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M40,32 H68 A10,10 0 0 1 78,42 V60 A10,10 0 0 1 68,70 H48 L38,78 V70 H40 A10,10 0 0 1 30,60 V42 A10,10 0 0 1 40,32 Z" />
+        android:pathData="M37,31 H55 C67.7,31 77,41.3 77,53.5 C77,65.7 67.7,76 55,76 H46 L36,83.5 V76 C33.8,76 33,74.6 33,72.5 V35 C33,32.8 34.8,31 37,31 Z" />
     <path
-        android:strokeColor="#2BA89A"
-        android:strokeWidth="4"
-        android:strokeLineCap="round"
-        android:pathData="M41,45 H67 M41,53 H60" />
-    <path
-        android:fillColor="#14365C"
-        android:pathData="M64,57 m-3.5,0 a3.5,3.5 0 1 0 7,0 a3.5,3.5 0 1 0 -7,0" />
+        android:fillColor="#19B39A"
+        android:pathData="M54,42.5 m-5.5,0 a5.5,5.5 0 1 0 11,0 a5.5,5.5 0 1 0 -11,0 M51.2,46 L56.8,46 L58.6,62 L49.4,62 Z" />
 </vector>

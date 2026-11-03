@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- الشعار داخل التطبيق: الخلفية النيلية مع الفقاعة وثقب القفل. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#2B2D6E"
+        android:pathData="M24,0 H84 A24,24 0 0 1 108,24 V84 A24,24 0 0 1 84,108 H24 A24,24 0 0 1 0,84 V24 A24,24 0 0 1 24,0 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M37,31 H55 C67.7,31 77,41.3 77,53.5 C77,65.7 67.7,76 55,76 H46 L36,83.5 V76 C33.8,76 33,74.6 33,72.5 V35 C33,32.8 34.8,31 37,31 Z" />
+    <path
+        android:fillColor="#19B39A"
+        android:pathData="M54,42.5 m-5.5,0 a5.5,5.5 0 1 0 11,0 a5.5,5.5 0 1 0 -11,0 M51.2,46 L56.8,46 L58.6,62 L49.4,62 Z" />
+</vector>

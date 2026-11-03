@@ -52,6 +52,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.GppMaybe
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,7 +73,8 @@ import app.dugy.data.Message
 import app.dugy.data.MessageStatus
 import app.dugy.data.Retention
 import app.dugy.ui.components.ConfirmDialog
-import app.dugy.ui.components.PrototypeBanner
+import app.dugy.ui.components.EmptyState
+import app.dugy.ui.components.NetworkBanner
 import app.dugy.ui.components.formatTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -77,7 +82,12 @@ import kotlinx.coroutines.launch
 private const val MAX_MESSAGE_CHARS = 4000
 
 @Composable
-fun ChatScreen(container: AppContainer, conversationId: String, onBack: () -> Unit) {
+fun ChatScreen(
+    container: AppContainer,
+    conversationId: String,
+    onBack: () -> Unit,
+    onOpenSafetyNumber: () -> Unit,
+) {
     val conversations by container.repository.conversations.collectAsStateWithLifecycle()
     val conv = conversations.firstOrNull { it.id == conversationId }
 
@@ -91,9 +101,11 @@ fun ChatScreen(container: AppContainer, conversationId: String, onBack: () -> Un
     var menuOpen by remember { mutableStateOf(false) }
     var showRetention by remember { mutableStateOf(false) }
     var showDeleteConv by remember { mutableStateOf(false) }
-    var showVerify by remember { mutableStateOf(false) }
     var messageToDelete by remember { mutableStateOf<Message?>(null) }
     val listState = rememberLazyListState()
+    val securityVersion by container.messenger.securityVersion.collectAsStateWithLifecycle()
+    val security = remember(securityVersion, conv.contact.handle) { container.messenger.security(conv.contact.handle) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(conversationId) {
         while (true) {
@@ -109,16 +121,8 @@ fun ChatScreen(container: AppContainer, conversationId: String, onBack: () -> Un
         val text = input.trim()
         if (text.isEmpty()) return
         input = ""
-        val contact = conv.contact
-        container.appScope.launch {
-            val msg = container.repository.addOutgoing(conversationId, text) ?: return@launch
-            val status = try {
-                container.transport.send(contact, msg.id, text)
-            } catch (e: Exception) {
-                MessageStatus.FAILED
-            }
-            container.repository.updateStatus(conversationId, msg.id, status)
-        }
+        // التشفير الطرفي يحدث داخل messenger على الجهاز قبل أي اتصال بالخادم.
+        container.messenger.send(conversationId, text)
     }
 
     Scaffold(
@@ -133,16 +137,37 @@ fun ChatScreen(container: AppContainer, conversationId: String, onBack: () -> Un
                     Column {
                         Text(conv.contact.name, maxLines = 1)
                         Text(
-                            if (conv.retentionMs != null) "رسائل مؤقتة: ${Retention.label(conv.retentionMs)}"
-                            else "جهة اتصال غير موثّقة",
+                            buildString {
+                                append("@${conv.contact.handle} · ")
+                                append(
+                                    when {
+                                        security.keyChanged -> "تغيّر مفتاح الأمان"
+                                        security.verified -> "موثّقة"
+                                        else -> "غير موثّقة"
+                                    }
+                                )
+                                if (conv.retentionMs != null) append(" · مؤقتة: ${Retention.label(conv.retentionMs)}")
+                            },
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = when {
+                                security.keyChanged -> MaterialTheme.colorScheme.error
+                                security.verified -> MaterialTheme.colorScheme.secondary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                         )
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showVerify = true }) {
-                        Icon(Icons.Outlined.VerifiedUser, contentDescription = "التحقق من الهوية")
+                    IconButton(onClick = onOpenSafetyNumber) {
+                        Icon(
+                            if (security.keyChanged) Icons.Outlined.GppMaybe else Icons.Outlined.VerifiedUser,
+                            contentDescription = "رمز الأمان والتحقق من الهوية",
+                            tint = when {
+                                security.keyChanged -> MaterialTheme.colorScheme.error
+                                security.verified -> MaterialTheme.colorScheme.secondary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
                     }
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Filled.MoreVert, contentDescription = "خيارات")
@@ -195,12 +220,32 @@ fun ChatScreen(container: AppContainer, conversationId: String, onBack: () -> Un
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            if (!container.transport.isEndToEndEncrypted) PrototypeBanner()
+            NetworkBanner(container)
+            if (security.keyChanged) {
+                KeyChangedBanner(
+                    name = conv.contact.name,
+                    onShowSafetyNumber = onOpenSafetyNumber,
+                    onAccept = {
+                        scope.launch { container.messenger.acceptNewKey(conversationId, conv.contact.handle) }
+                    },
+                )
+            } else if (!security.verified && conv.messages.isNotEmpty()) {
+                Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "الرسائل مشفّرة طرفيًا. للتأكد أنك تراسل الشخص الصحيح لا منتحلًا، طابق «رمز الأمان» معه.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier
+                            .clickable(onClick = onOpenSafetyNumber)
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+            }
             if (conv.messages.isEmpty()) {
-                Text(
-                    "اكتب أول رسالة بالأسفل. لا توجد قوالب جاهزة؛ اكتب ما تشاء.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(24.dp),
+                EmptyState(
+                    icon = Icons.Outlined.Lock,
+                    title = "محادثة مشفّرة طرفيًا",
+                    body = "اكتب أول رسالة بالأسفل. تُشفَّر على هاتفك قبل إرسالها، ولا يستطيع فكّها إلا هاتف @${conv.contact.handle}.",
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
             LazyColumn(
@@ -210,7 +255,11 @@ fun ChatScreen(container: AppContainer, conversationId: String, onBack: () -> Un
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 items(conv.messages, key = { it.id }) { msg ->
-                    MessageBubble(msg, onLongPress = { messageToDelete = msg })
+                    MessageBubble(
+                        msg,
+                        onLongPress = { messageToDelete = msg },
+                        onRetry = { container.messenger.retry(conversationId, msg.id) },
+                    )
                 }
             }
         }
@@ -260,26 +309,11 @@ fun ChatScreen(container: AppContainer, conversationId: String, onBack: () -> Un
         )
     }
 
-    if (showVerify) {
-        AlertDialog(
-            onDismissRequest = { showVerify = false },
-            icon = { Icon(Icons.Outlined.VerifiedUser, contentDescription = null) },
-            title = { Text("التحقق من هوية جهة الاتصال") },
-            text = {
-                Text(
-                    "في النسخة الكاملة ستقارن مع جهة الاتصال «رمز أمان» رقميًا أو تمسح رمز QR من جهازها، " +
-                        "وسيظهر تحذير واضح إذا تغيّر مفتاحها.\n\n" +
-                        "هذه الميزة غير متاحة في النموذج الأولي لأن التشفير الطرفي لم يُدمج بعد، " +
-                        "لذلك لا تُعدّ هذه المحادثة موثّقة."
-                )
-            },
-            confirmButton = { TextButton(onClick = { showVerify = false }) { Text("حسنًا") } },
-        )
-    }
 }
 
 @Composable
-private fun MessageBubble(msg: Message, onLongPress: () -> Unit) {
+private fun MessageBubble(msg: Message, onLongPress: () -> Unit, onRetry: () -> Unit) {
+    val canRetry = msg.outgoing && (msg.status == MessageStatus.FAILED || msg.status == MessageStatus.KEY_CHANGED)
     Row(
         modifier = Modifier.fillMaxWidth(),
         // المرسَلة في جهة النهاية (اليسار في RTL)، كما تنعكس الواجهات في أندرويد.
@@ -290,7 +324,12 @@ private fun MessageBubble(msg: Message, onLongPress: () -> Unit) {
             shape = RoundedCornerShape(18.dp),
             modifier = Modifier
                 .widthIn(max = 320.dp)
-                .combinedClickable(onClick = {}, onLongClick = onLongPress, onLongClickLabel = "حذف الرسالة"),
+                .combinedClickable(
+                    onClick = { if (msg.outgoing && msg.status == MessageStatus.FAILED) onRetry() },
+                    onClickLabel = if (canRetry) "إعادة الإرسال" else null,
+                    onLongClick = onLongPress,
+                    onLongClickLabel = "حذف الرسالة",
+                ),
         ) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
                 Text(
@@ -310,10 +349,14 @@ private fun MessageBubble(msg: Message, onLongPress: () -> Unit) {
                             icon,
                             contentDescription = null,
                             modifier = Modifier.size(14.dp),
-                            tint = if (msg.status == MessageStatus.FAILED) MaterialTheme.colorScheme.error
+                            tint = if (canRetry) MaterialTheme.colorScheme.error
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            if (msg.status == MessageStatus.FAILED) "$label — اضغط لإعادة الإرسال" else label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (canRetry) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -323,10 +366,12 @@ private fun MessageBubble(msg: Message, onLongPress: () -> Unit) {
 
 private fun statusInfo(status: MessageStatus): Pair<ImageVector, String> = when (status) {
     MessageStatus.PENDING -> Icons.Outlined.Schedule to "قيد الإرسال"
-    MessageStatus.SENT -> Icons.Outlined.Done to "أُرسلت"
+    MessageStatus.SENT -> Icons.Outlined.Done to "أُرسلت مشفّرة"
     MessageStatus.DELIVERED -> Icons.Outlined.DoneAll to "تم التسليم"
     MessageStatus.FAILED -> Icons.Outlined.ErrorOutline to "فشل الإرسال"
     MessageStatus.LOCAL_ONLY -> Icons.Outlined.PhonelinkLock to "محفوظة محليًا — لم تُرسل"
+    MessageStatus.KEY_CHANGED -> Icons.Outlined.GppMaybe to "لم تُرسل — تغيّر مفتاح جهة الاتصال"
+    MessageStatus.RECEIVED -> Icons.Outlined.Done to "مستلمة"
 }
 
 @Composable
@@ -362,4 +407,29 @@ private fun RetentionDialog(current: Long?, onSelect: (Long?) -> Unit, onDismiss
         confirmButton = { TextButton(onClick = { onSelect(selected) }) { Text("حفظ") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
     )
+}
+
+@Composable
+private fun KeyChangedBanner(name: String, onShowSafetyNumber: () -> Unit, onAccept: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Outlined.GppMaybe, contentDescription = null)
+                Text("تغيّر مفتاح الأمان لـ $name", style = MaterialTheme.typography.titleSmall)
+            }
+            Text(
+                "قد يعني هذا أنه أعاد تثبيت التطبيق أو سجّل الدخول من هاتف جديد، وقد يعني أن شخصًا آخر يحاول انتحاله. " +
+                    "أُوقف الإرسال إليه. تواصل معه بطريقة أخرى وطابقا رمز الأمان الجديد قبل المتابعة.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onShowSafetyNumber) { Text("عرض رمز الأمان") }
+                TextButton(onClick = onAccept) { Text("قبول المفتاح الجديد") }
+            }
+        }
+    }
 }

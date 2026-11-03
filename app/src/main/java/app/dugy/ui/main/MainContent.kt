@@ -32,6 +32,8 @@ import app.dugy.AppContainer
 import app.dugy.ui.chats.ChatScreen
 import app.dugy.ui.chats.ConversationsTab
 import app.dugy.ui.chats.NewChatDialog
+import app.dugy.ui.chats.SafetyNumberScreen
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.dugy.ui.quotes.QuotesTab
 import app.dugy.ui.settings.ChangePinScreen
 import app.dugy.ui.settings.SettingsTab
@@ -40,6 +42,7 @@ import app.dugy.ui.settings.ThreatModelScreen
 private sealed interface Route {
     data object Tabs : Route
     data class Chat(val id: String) : Route
+    data class SafetyNumber(val conversationId: String) : Route
     data object ThreatModel : Route
     data object ChangePin : Route
 }
@@ -61,6 +64,7 @@ fun MainContent(container: AppContainer) {
     var stack by remember { mutableStateOf(listOf<Route>(Route.Tabs)) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var showNewChat by remember { mutableStateOf(false) }
+    val account by container.messenger.account.collectAsStateWithLifecycle()
 
     fun push(route: Route) {
         stack = stack + route
@@ -97,7 +101,7 @@ fun MainContent(container: AppContainer) {
                 }
             },
             floatingActionButton = {
-                if (tab == 1) {
+                if (tab == 1 && account != null) {
                     ExtendedFloatingActionButton(
                         onClick = { showNewChat = true },
                         icon = { Icon(Icons.Filled.Add, contentDescription = null) },
@@ -119,17 +123,24 @@ fun MainContent(container: AppContainer) {
             }
         }
 
-        is Route.Chat -> ChatScreen(container, top.id, onBack = { pop() })
+        is Route.Chat -> ChatScreen(
+            container,
+            top.id,
+            onBack = { pop() },
+            onOpenSafetyNumber = { push(Route.SafetyNumber(top.id)) },
+        )
+        is Route.SafetyNumber -> SafetyNumberScreen(container, top.conversationId, onBack = { pop() })
         Route.ThreatModel -> ThreatModelScreen(onBack = { pop() })
         Route.ChangePin -> ChangePinScreen(container, onDone = { pop() })
     }
 
     if (showNewChat) {
         NewChatDialog(
+            container,
             onDismiss = { showNewChat = false },
-            onCreate = { name, handle ->
+            onOpened = { id ->
                 showNewChat = false
-                container.repository.createConversation(name, handle)?.let { push(Route.Chat(it)) }
+                push(Route.Chat(id))
             },
         )
     }

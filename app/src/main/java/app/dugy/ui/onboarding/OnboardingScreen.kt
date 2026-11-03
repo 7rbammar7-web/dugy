@@ -28,6 +28,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import app.dugy.R
 
 @Composable
 fun OnboardingScreen(onContinue: () -> Unit) {
@@ -40,6 +43,11 @@ fun OnboardingScreen(onContinue: () -> Unit) {
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            Image(
+                painterResource(R.drawable.dugy_logo),
+                contentDescription = null,
+                modifier = Modifier.size(88.dp).align(Alignment.CenterHorizontally),
+            )
             Text(
                 "DUGY — مراسلة خاصة",
                 style = MaterialTheme.typography.headlineMedium,
@@ -55,7 +63,7 @@ fun OnboardingScreen(onContinue: () -> Unit) {
             Feature(
                 Icons.Outlined.Forum,
                 "المحادثات الخاصة",
-                "قسم ظاهر لمراسلة جهات اتصالك برسائل تكتبها بنفسك، مع قفل وإشعارات لا تكشف المحتوى.",
+                "قسم ظاهر لمراسلة أصدقائك برسائل مشفّرة تشفيرًا طرفيًا بمكتبة Signal: لا يقرؤها إلا هاتف المستلم.",
             )
 
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
@@ -66,6 +74,8 @@ fun OnboardingScreen(onContinue: () -> Unit) {
                         Text("حدود الخصوصية باختصار", style = MaterialTheme.typography.titleMedium)
                     }
                     Bullet("التطبيق يُقفل برمز تختاره، ويمكن إضافة البصمة.")
+                    Bullet("الرسائل تُشفَّر على هاتفك قبل إرسالها، والخادم لا يملك مفاتيح فكها.")
+                    Bullet("الخادم يرى اسم المستخدم ومن تراسل ومتى، لكنه لا يرى نص الرسائل.")
                     Bullet("الرسائل تُحفظ على جهازك مشفّرة، ولا تدخل في النسخ الاحتياطي السحابي.")
                     Bullet("لا تحمي أي حماية من جهاز مخترق أو هاتف مفتوح بيد شخص آخر.")
                     Bullet("منع لقطات الشاشة لا يمنع تصوير الشاشة بكاميرا أخرى.")
@@ -75,11 +85,10 @@ fun OnboardingScreen(onContinue: () -> Unit) {
 
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("هذا نموذج أولي", style = MaterialTheme.typography.titleMedium)
+                    Text("إصدار تجريبي", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "هذا الإصدار لا يرسل رسائل مشفرة فعليًا، ولا يملك إذن الوصول إلى الإنترنت. " +
-                            "تبقى الرسائل التي تكتبها محفوظة مشفّرة على هذا الجهاز فقط. " +
-                            "لا تستخدمه لمحادثات حساسة قبل دمج التشفير الطرفي واجتياز مراجعة أمنية مستقلة.",
+                        "التشفير يعتمد على مكتبة Signal المعروفة، لكن التطبيق نفسه جديد ولم يخضع بعد لمراجعة أمنية مستقلة. " +
+                            "لا تعتمد عليه وحده في المواقف التي تهدد السلامة.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }

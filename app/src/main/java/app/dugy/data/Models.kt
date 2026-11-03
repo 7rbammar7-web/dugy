@@ -3,8 +3,10 @@ package app.dugy.data
 data class Contact(
     val id: String,
     val name: String,
-    /** معرّف جهة الاتصال كما أدخله المستخدم. في المرحلة الثانية: معرّف حساب أو رمز دعوة موثّق. */
+    /** اسم مستخدم جهة الاتصال في DUGY، وهو أيضًا عنوانها في بروتوكول التشفير. */
     val handle: String,
+    /** معرّف حسابها على الخادم (فارغ في المحادثات القديمة المحلية). */
+    val uid: String = "",
 )
 
 enum class MessageStatus {
@@ -17,6 +19,10 @@ enum class MessageStatus {
     FAILED,
     /** النموذج الأولي: حُفظت مشفّرة على هذا الجهاز ولم تُرسل إلى أي مكان. */
     LOCAL_ONLY,
+    /** لم تُرسل لأن مفتاح هوية جهة الاتصال تغيّر وينتظر قبول المستخدم. */
+    KEY_CHANGED,
+    /** رسالة واردة استُلمت وفُكّ تشفيرها على هذا الجهاز. */
+    RECEIVED,
 }
 
 data class Message(

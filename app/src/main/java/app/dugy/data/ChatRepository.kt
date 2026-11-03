@@ -68,12 +68,48 @@ class ChatRepository(context: Context, private val scope: CoroutineScope) {
 
     // ---------------- العمليات ----------------
 
-    fun createConversation(name: String, handle: String): String? {
+    fun conversation(id: String): Conversation? = _conversations.value.firstOrNull { it.id == id }
+
+    /** محادثة جهة الاتصال صاحبة اسم المستخدم [username]، أو محادثة جديدة إن لم توجد. */
+    fun findOrCreateConversation(username: String, uid: String, displayName: String = username): String? {
+        if (key == null) return null
+        _conversations.value.firstOrNull { it.contact.handle == username }?.let { existing ->
+            if (existing.contact.uid != uid && uid.isNotEmpty()) {
+                mutate { list ->
+                    list.map { if (it.id == existing.id) it.copy(contact = it.contact.copy(uid = uid)) else it }
+                }
+            }
+            return existing.id
+        }
+        return createConversation(displayName, username, uid)
+    }
+
+    /** يضيف رسالة واردة بعد فك تشفيرها. يتجاهل التكرار بنفس المعرّف. */
+    fun addIncoming(username: String, uid: String, messageId: String, text: String, at: Long, failed: Boolean): String? {
+        val convId = findOrCreateConversation(username, uid) ?: return null
+        val exists = conversation(convId)?.messages?.any { it.id == messageId } == true
+        if (exists) return convId
+        val msg = Message(
+            id = messageId,
+            outgoing = false,
+            text = text,
+            createdAt = at,
+            status = if (failed) MessageStatus.FAILED else MessageStatus.RECEIVED,
+        )
+        mutate { list ->
+            list.map { c ->
+                if (c.id != convId) c else c.copy(messages = (c.messages + msg).sortedBy { it.createdAt })
+            }
+        }
+        return convId
+    }
+
+    fun createConversation(name: String, handle: String, uid: String = ""): String? {
         if (key == null) return null
         val now = System.currentTimeMillis()
         val conv = Conversation(
             id = UUID.randomUUID().toString(),
-            contact = Contact(UUID.randomUUID().toString(), name.trim(), handle.trim()),
+            contact = Contact(UUID.randomUUID().toString(), name.trim(), handle.trim(), uid),
             createdAt = now,
             retentionMs = null,
             messages = emptyList(),
