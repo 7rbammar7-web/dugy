@@ -54,7 +54,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.GppMaybe
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -121,7 +121,6 @@ fun ChatScreen(
         val text = input.trim()
         if (text.isEmpty()) return
         input = ""
-        // التشفير الطرفي يحدث داخل messenger على الجهاز قبل أي اتصال بالخادم.
         container.messenger.send(conversationId, text)
     }
 
@@ -141,7 +140,7 @@ fun ChatScreen(
                                 append("@${conv.contact.handle} · ")
                                 append(
                                     when {
-                                        security.keyChanged -> "تغيّر مفتاح الأمان"
+                                        security.keyChanged -> "تغيّر رمز التحقق"
                                         security.verified -> "موثّقة"
                                         else -> "غير موثّقة"
                                     }
@@ -161,7 +160,7 @@ fun ChatScreen(
                     IconButton(onClick = onOpenSafetyNumber) {
                         Icon(
                             if (security.keyChanged) Icons.Outlined.GppMaybe else Icons.Outlined.VerifiedUser,
-                            contentDescription = "رمز الأمان والتحقق من الهوية",
+                            contentDescription = "رمز التحقق من الهوية",
                             tint = when {
                                 security.keyChanged -> MaterialTheme.colorScheme.error
                                 security.verified -> MaterialTheme.colorScheme.secondary
@@ -232,7 +231,7 @@ fun ChatScreen(
             } else if (!security.verified && conv.messages.isNotEmpty()) {
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        "الرسائل مشفّرة طرفيًا. للتأكد أنك تراسل الشخص الصحيح لا منتحلًا، طابق «رمز الأمان» معه.",
+                        "للتأكد أنك تراسل الشخص الصحيح لا منتحلًا، طابق «رمز التحقق» معه.",
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier
                             .clickable(onClick = onOpenSafetyNumber)
@@ -242,9 +241,9 @@ fun ChatScreen(
             }
             if (conv.messages.isEmpty()) {
                 EmptyState(
-                    icon = Icons.Outlined.Lock,
-                    title = "محادثة مشفّرة طرفيًا",
-                    body = "اكتب أول رسالة بالأسفل. تُشفَّر على هاتفك قبل إرسالها، ولا يستطيع فكّها إلا هاتف @${conv.contact.handle}.",
+                    icon = Icons.Outlined.ChatBubbleOutline,
+                    title = "محادثة جديدة",
+                    body = "اكتب أول رسالة بالأسفل.",
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -366,11 +365,11 @@ private fun MessageBubble(msg: Message, onLongPress: () -> Unit, onRetry: () -> 
 
 private fun statusInfo(status: MessageStatus): Pair<ImageVector, String> = when (status) {
     MessageStatus.PENDING -> Icons.Outlined.Schedule to "قيد الإرسال"
-    MessageStatus.SENT -> Icons.Outlined.Done to "أُرسلت مشفّرة"
+    MessageStatus.SENT -> Icons.Outlined.Done to "أُرسلت"
     MessageStatus.DELIVERED -> Icons.Outlined.DoneAll to "تم التسليم"
     MessageStatus.FAILED -> Icons.Outlined.ErrorOutline to "فشل الإرسال"
     MessageStatus.LOCAL_ONLY -> Icons.Outlined.PhonelinkLock to "محفوظة محليًا — لم تُرسل"
-    MessageStatus.KEY_CHANGED -> Icons.Outlined.GppMaybe to "لم تُرسل — تغيّر مفتاح جهة الاتصال"
+    MessageStatus.KEY_CHANGED -> Icons.Outlined.GppMaybe to "لم تُرسل — تغيّر رمز التحقق لجهة الاتصال"
     MessageStatus.RECEIVED -> Icons.Outlined.Done to "مستلمة"
 }
 
@@ -419,16 +418,16 @@ private fun KeyChangedBanner(name: String, onShowSafetyNumber: () -> Unit, onAcc
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Outlined.GppMaybe, contentDescription = null)
-                Text("تغيّر مفتاح الأمان لـ $name", style = MaterialTheme.typography.titleSmall)
+                Text("تغيّر رمز التحقق لـ $name", style = MaterialTheme.typography.titleSmall)
             }
             Text(
                 "قد يعني هذا أنه أعاد تثبيت التطبيق أو سجّل الدخول من هاتف جديد، وقد يعني أن شخصًا آخر يحاول انتحاله. " +
-                    "أُوقف الإرسال إليه. تواصل معه بطريقة أخرى وطابقا رمز الأمان الجديد قبل المتابعة.",
+                    "أُوقف الإرسال إليه. تواصل معه بطريقة أخرى وطابقا رمز التحقق الجديد قبل المتابعة.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onShowSafetyNumber) { Text("عرض رمز الأمان") }
-                TextButton(onClick = onAccept) { Text("قبول المفتاح الجديد") }
+                TextButton(onClick = onShowSafetyNumber) { Text("عرض رمز التحقق") }
+                TextButton(onClick = onAccept) { Text("قبول الرمز الجديد") }
             }
         }
     }

@@ -77,7 +77,7 @@ fun SafetyNumberScreen(container: AppContainer, conversationId: String, onBack: 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("رمز الأمان") },
+                title = { Text("رمز التحقق") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
@@ -96,8 +96,8 @@ fun SafetyNumberScreen(container: AppContainer, conversationId: String, onBack: 
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             val (icon, label, color) = when {
-                security.keyChanged -> Triple(Icons.Outlined.GppMaybe, "تغيّر مفتاح الأمان — غير موثّقة", MaterialTheme.colorScheme.error)
-                security.verified -> Triple(Icons.Outlined.VerifiedUser, "موثّقة: طابقتما رمز الأمان", MaterialTheme.colorScheme.secondary)
+                security.keyChanged -> Triple(Icons.Outlined.GppMaybe, "تغيّر رمز التحقق — غير موثّقة", MaterialTheme.colorScheme.error)
+                security.verified -> Triple(Icons.Outlined.VerifiedUser, "موثّقة: طابقتما رمز التحقق", MaterialTheme.colorScheme.secondary)
                 else -> Triple(Icons.Outlined.VerifiedUser, "غير موثّقة بعد", MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -107,7 +107,7 @@ fun SafetyNumberScreen(container: AppContainer, conversationId: String, onBack: 
 
             Text(
                 "قارن الأرقام التالية مع ما يظهر على هاتف ${contact.name} (@${contact.handle}) وجهًا لوجه أو في مكالمة " +
-                    "تعرف فيها صوته. إذا تطابقت كلها فرسائلكما لا يستطيع أحد غيركما قراءتها.",
+                    "تعرف فيها صوته. إذا تطابقت كلها فأنت تراسل الشخص الصحيح.",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )
@@ -122,7 +122,7 @@ fun SafetyNumberScreen(container: AppContainer, conversationId: String, onBack: 
                         n != null -> SafetyDigits(n)
                         failed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                "تعذّر جلب مفتاح جهة الاتصال. تحقق من الاتصال بالإنترنت.",
+                                "تعذّر جلب رمز جهة الاتصال. تحقق من الاتصال بالإنترنت.",
                                 textAlign = TextAlign.Center,
                             )
                             OutlinedButton(onClick = { attempt++ }) { Text("إعادة المحاولة") }
@@ -137,9 +137,9 @@ fun SafetyNumberScreen(container: AppContainer, conversationId: String, onBack: 
                     Button(
                         onClick = { scope.launch { container.messenger.acceptNewKey(conversationId, contact.handle) } },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("قبول المفتاح الجديد") }
+                    ) { Text("قبول الرمز الجديد") }
                     Text(
-                        "اقبل المفتاح الجديد فقط بعد أن تتأكد من صاحبه. سيعود الإرسال، وتبقى المحادثة غير موثّقة حتى تطابقا الرمز الجديد.",
+                        "اقبل الرمز الجديد فقط بعد أن تتأكد من صاحبه. سيعود الإرسال، وتبقى المحادثة غير موثّقة حتى تطابقا الرمز الجديد.",
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
                     )
@@ -157,7 +157,7 @@ fun SafetyNumberScreen(container: AppContainer, conversationId: String, onBack: 
             }
 
             Text(
-                "إذا تغيّر مفتاح جهة الاتصال لاحقًا ستزول علامة التوثيق، ويتوقف الإرسال حتى تقرر بنفسك.",
+                "إذا تغيّر رمز جهة الاتصال لاحقًا ستزول علامة التوثيق، ويتوقف الإرسال حتى تقرر بنفسك.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

@@ -19,7 +19,6 @@ class AppContainer(context: Context) {
     val vault = Vault(appContext)
     val repository = ChatRepository(appContext, appScope)
 
-    /** المراسلة المشفّرة طرفيًا عبر الخادم. */
     val messenger = Messenger(appContext, appScope, repository, settings)
 
     val lockManager = LockManager(settings, vault, repository, messenger)

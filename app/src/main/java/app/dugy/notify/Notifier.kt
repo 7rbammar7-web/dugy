@@ -15,24 +15,27 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import app.dugy.MainActivity
 import app.dugy.R
-import app.dugy.data.NotificationPreview
 
 /**
- * إشعارات الرسائل.
- * - على شاشة القفل تظهر دائمًا نسخة عامة: «لديك رسالة جديدة» (publicVersion).
- * - داخل الإشعار نفسه يُحترم اختيار المستخدم، والافتراضي إخفاء كل التفاصيل.
- * - لا يُوضع أي محتوى في extras أو بيانات غير مرئية.
+ * تنبيه واحد عام: «خاطرة جديدة». لا يحمل أي اسم أو نص أو تفصيل،
+ * ولا يوضع أي محتوى في extras أو بيانات غير مرئية.
  */
 object Notifier {
-    private const val CHANNEL_ID = "messages"
+    private const val CHANNEL_ID = "khawater"
+    private const val OLD_CHANNEL_ID = "messages"
     private const val NOTIFICATION_ID = 1001
 
+    private const val TITLE = "خاطرة جديدة"
+    private const val BODY = "وصلتك خاطرة جديدة، افتح التطبيق لقراءتها."
+
     fun createChannel(context: Context) {
-        val channel = NotificationChannel(CHANNEL_ID, "الرسائل", NotificationManager.IMPORTANCE_DEFAULT).apply {
-            description = "إشعارات الرسائل الواردة. لا تعرض المحتوى افتراضيًا."
-            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+        val nm = context.getSystemService(NotificationManager::class.java)
+        nm.deleteNotificationChannel(OLD_CHANNEL_ID)
+        val channel = NotificationChannel(CHANNEL_ID, "الخواطر", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            description = "تنبيه عند وصول خاطرة جديدة."
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        nm.createNotificationChannel(channel)
     }
 
     fun hasPermission(context: Context): Boolean =
@@ -41,13 +44,7 @@ object Notifier {
             PackageManager.PERMISSION_GRANTED
 
     @SuppressLint("MissingPermission")
-    fun showMessage(
-        context: Context,
-        preview: NotificationPreview,
-        senderName: String?,
-        text: String?,
-        isTest: Boolean,
-    ): Boolean {
+    fun showKhawater(context: Context): Boolean {
         if (!hasPermission(context) || !NotificationManagerCompat.from(context).areNotificationsEnabled()) {
             return false
         }
@@ -60,30 +57,23 @@ object Notifier {
         )
 
         val publicVersion = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_message)
-            .setContentTitle("DUGY")
-            .setContentText("لديك رسالة جديدة")
+            .setSmallIcon(R.drawable.ic_stat_heart)
+            .setContentTitle(TITLE)
+            .setContentText(BODY)
             .build()
 
-        val (title, body) = when (preview) {
-            NotificationPreview.HIDDEN -> "DUGY" to "لديك رسالة جديدة"
-            NotificationPreview.SENDER_ONLY -> (senderName ?: "DUGY") to "رسالة جديدة"
-            NotificationPreview.FULL -> (senderName ?: "DUGY") to (text ?: "رسالة جديدة")
-        }
-
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_message)
-            .setContentTitle(title)
-            .setContentText(body)
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_heart)
+            .setContentTitle(TITLE)
+            .setContentText(BODY)
             .setContentIntent(pending)
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPublicVersion(publicVersion)
-        if (isTest) builder.setSubText("إشعار تجريبي")
+            .build()
 
-        NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
+        NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
         return true
     }
 

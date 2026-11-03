@@ -13,7 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoStories
-import androidx.compose.material.icons.outlined.Forum
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -49,54 +49,25 @@ fun OnboardingScreen(onContinue: () -> Unit) {
                 modifier = Modifier.size(88.dp).align(Alignment.CenterHorizontally),
             )
             Text(
-                "DUGY — مراسلة خاصة",
+                "DUGY — خواطر",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
             )
             Text(
-                "تطبيق يجمع قسمين واضحين ومنفصلين:",
+                "خواطر واقتباسات قصيرة تقرؤها كل يوم.",
                 style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
             )
-            Feature(Icons.Outlined.AutoStories, "الخواطر", "خواطر واقتباسات قصيرة تقرؤها وتحفظ ما يعجبك منها.")
-            Feature(
-                Icons.Outlined.Forum,
-                "المحادثات الخاصة",
-                "قسم ظاهر لمراسلة أصدقائك برسائل مشفّرة تشفيرًا طرفيًا بمكتبة Signal: لا يقرؤها إلا هاتف المستلم.",
-            )
-
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Shield, contentDescription = null)
-                        Spacer(Modifier.size(8.dp))
-                        Text("حدود الخصوصية باختصار", style = MaterialTheme.typography.titleMedium)
-                    }
-                    Bullet("التطبيق يُقفل برمز تختاره، ويمكن إضافة البصمة.")
-                    Bullet("الرسائل تُشفَّر على هاتفك قبل إرسالها، والخادم لا يملك مفاتيح فكها.")
-                    Bullet("الخادم يرى اسم المستخدم ومن تراسل ومتى، لكنه لا يرى نص الرسائل.")
-                    Bullet("الرسائل تُحفظ على جهازك مشفّرة، ولا تدخل في النسخ الاحتياطي السحابي.")
-                    Bullet("لا تحمي أي حماية من جهاز مخترق أو هاتف مفتوح بيد شخص آخر.")
-                    Bullet("منع لقطات الشاشة لا يمنع تصوير الشاشة بكاميرا أخرى.")
-                    Bullet("ما يصل إلى المستلم قد يحفظه أو ينسخه؛ والحذف لا يضمن محو نسخه.")
-                }
-            }
-
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("إصدار تجريبي", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "التشفير يعتمد على مكتبة Signal المعروفة، لكن التطبيق نفسه جديد ولم يخضع بعد لمراجعة أمنية مستقلة. " +
-                            "لا تعتمد عليه وحده في المواقف التي تهدد السلامة.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
+            Feature(Icons.Outlined.AutoStories, "الخواطر", "خاطرة لكل يوم، ومجموعة تتجدد تقرؤها متى شئت.")
+            Feature(Icons.Outlined.FavoriteBorder, "المفضلة", "احفظ ما يعجبك من الخواطر وارجع إليه بسهولة.")
+            Feature(Icons.Outlined.Shield, "قفل التطبيق", "يُقفل التطبيق برمز تختاره، ويمكن إضافة البصمة.")
 
             Spacer(Modifier.height(8.dp))
             Button(onClick = onContinue, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                Text("فهمت، أنشئ رمز القفل")
+                Text("ابدأ — أنشئ رمز القفل")
             }
         }
     }

@@ -28,8 +28,8 @@ fun PinSetupScreen(container: AppContainer) {
         if (pending == null) {
             PinEntry(
                 title = "أنشئ رمز القفل",
-                subtitle = "من $PIN_MIN إلى $PIN_MAX أرقام. يحمي الرمز رسائلك المحفوظة على هذا الجهاز، " +
-                    "ولا يُرسل إلى أي خادم. إذا نسيته فلن يمكن استعادة الرسائل المحلية.",
+                subtitle = "من $PIN_MIN إلى $PIN_MAX أرقام. يحمي الرمز بياناتك على هذا الجهاز، " +
+                    "ولا يُرسل إلى أي خادم. إذا نسيته فلن يمكن استعادة بياناتك.",
                 error = error,
                 busy = false,
                 enabled = true,

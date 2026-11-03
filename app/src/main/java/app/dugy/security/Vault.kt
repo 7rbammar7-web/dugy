@@ -16,17 +16,15 @@ sealed interface UnlockResult {
     /**
      * @param freeAttemptsLeft عدد المحاولات المتبقية قبل بدء التأخير (null إذا بدأ التأخير).
      * @param lockoutMs مدة الانتظار المفروضة الآن (0 إن لم يوجد).
-     * @param attemptsBeforeWipe عدد المحاولات قبل المسح (null إن كان المسح غير مفعّل).
      */
     data class WrongPin(
         val freeAttemptsLeft: Int?,
         val lockoutMs: Long,
-        val attemptsBeforeWipe: Int?,
     ) : UnlockResult
 
     data class LockedOut(val remainingMs: Long) : UnlockResult
 
-    /** تجاوز الحد وكان المستخدم قد فعّل المسح صراحةً؛ على المستدعي تنفيذ المسح. */
+    /** بلغت المحاولات الفاشلة الحد (إلزامي)؛ على المستدعي تنفيذ المسح. */
     data object MustWipe : UnlockResult
 
     /** تعذّر الوصول إلى مفتاح Keystore (مثلًا بعد استعادة غير مدعومة). */
@@ -102,7 +100,7 @@ class Vault(context: Context) {
     }
 
     /** عملية ثقيلة: استدعِها خارج الخيط الرئيسي. */
-    fun unlockWithPin(pin: CharArray, wipeEnabled: Boolean): UnlockResult {
+    fun unlockWithPin(pin: CharArray): UnlockResult {
         val remaining = lockoutRemainingMs()
         if (remaining > 0) return UnlockResult.LockedOut(remaining)
 
@@ -118,7 +116,7 @@ class Vault(context: Context) {
             return UnlockResult.StorageError
         }
 
-        if (key == null) return registerFailure(wipeEnabled)
+        if (key == null) return registerFailure()
 
         dataKey = key
         resetFailures()
@@ -148,9 +146,9 @@ class Vault(context: Context) {
         return (until - now).coerceIn(0L, MAX_LOCKOUT_MS)
     }
 
-    private fun registerFailure(wipeEnabled: Boolean): UnlockResult {
+    private fun registerFailure(): UnlockResult {
         val fails = failureCount() + 1
-        if (wipeEnabled && fails >= WIPE_THRESHOLD) return UnlockResult.MustWipe
+        if (fails >= WIPE_THRESHOLD) return UnlockResult.MustWipe
 
         val lockout = lockoutFor(fails)
         prefs.edit()
@@ -161,7 +159,6 @@ class Vault(context: Context) {
         return UnlockResult.WrongPin(
             freeAttemptsLeft = (FREE_ATTEMPTS - fails).takeIf { it > 0 },
             lockoutMs = lockout,
-            attemptsBeforeWipe = if (wipeEnabled) WIPE_THRESHOLD - fails else null,
         )
     }
 
@@ -173,6 +170,51 @@ class Vault(context: Context) {
 
     private fun resetFailures() {
         prefs.edit().putInt(K_FAILS, 0).putLong(K_LOCK_UNTIL, 0L).commit()
+    }
+
+    // ---------------- كلمة مرور الدخول من «تواصل معنا» ----------------
+
+    /**
+     * يحفظ أثرًا لكلمة مرور الحساب (PBKDF2 بملح عشوائي) مغلّفًا بمفتاح البيانات،
+     * ليُتحقق منها دون اتصال بالإنترنت. يتطلب أن تكون الخزنة مفتوحة. عملية ثقيلة.
+     */
+    fun setAccessSecret(password: CharArray) {
+        val salt = ByteArray(16)
+        random.nextBytes(salt)
+        val hash = PinKdf.derive(password, salt, ACCESS_ITERATIONS)
+        val blob = AesGcm.encrypt(currentKey(), salt + hash, AAD_ACCESS)
+        hash.fill(0)
+        prefs.edit().putString(K_ACCESS, b64(blob)).putInt(K_HIDDEN_FAILS, 0).commit()
+    }
+
+    fun hasAccessSecret(): Boolean = prefs.contains(K_ACCESS)
+
+    fun clearAccessSecret() {
+        prefs.edit().remove(K_ACCESS).putInt(K_HIDDEN_FAILS, 0).commit()
+    }
+
+    /** يتطلب أن تكون الخزنة مفتوحة. عملية ثقيلة: استدعِها خارج الخيط الرئيسي. */
+    fun checkAccessSecret(password: CharArray): Boolean {
+        val stored = prefs.getString(K_ACCESS, null) ?: return false
+        val plain = try {
+            AesGcm.decrypt(currentKey(), unb64(stored), AAD_ACCESS)
+        } catch (e: java.security.GeneralSecurityException) {
+            return false
+        }
+        val salt = plain.copyOfRange(0, 16)
+        val expected = plain.copyOfRange(16, plain.size)
+        val actual = PinKdf.derive(password, salt, ACCESS_ITERATIONS)
+        val ok = java.security.MessageDigest.isEqual(expected, actual)
+        plain.fill(0); expected.fill(0); actual.fill(0)
+        if (ok) prefs.edit().putInt(K_HIDDEN_FAILS, 0).commit()
+        return ok
+    }
+
+    /** يسجّل محاولة دخول فاشلة. يعيد true إذا بلغت الحد ويجب المسح. */
+    fun registerAccessFailure(): Boolean {
+        val fails = prefs.getInt(K_HIDDEN_FAILS, 0) + 1
+        prefs.edit().putInt(K_HIDDEN_FAILS, fails).commit()
+        return fails >= WIPE_THRESHOLD
     }
 
     // ---------------- البصمة ----------------
@@ -245,6 +287,8 @@ class Vault(context: Context) {
         private const val MAX_LOCKOUT_MS = 60 * 60 * 1000L
 
         private val AAD_PIN = "dugy-pin-wrap-v1".toByteArray()
+        private val AAD_ACCESS = "dugy-access-v1".toByteArray()
+        private const val ACCESS_ITERATIONS = 120_000
 
         private const val K_SALT = "salt"
         private const val K_ITER = "iter"
@@ -252,5 +296,7 @@ class Vault(context: Context) {
         private const val K_BIO_BLOB = "bio_blob"
         private const val K_FAILS = "fails"
         private const val K_LOCK_UNTIL = "lock_until"
+        private const val K_ACCESS = "access"
+        private const val K_HIDDEN_FAILS = "access_fails"
     }
 }

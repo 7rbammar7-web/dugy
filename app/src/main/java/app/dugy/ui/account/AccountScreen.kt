@@ -12,8 +12,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -36,15 +34,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.dugy.AppContainer
 import app.dugy.R
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
- * إنشاء حساب أو تسجيل الدخول باسم مستخدم وكلمة مرور فقط.
+ * إنشاء حساب أو تسجيل الدخول باسم مستخدم وكلمة مرور فقط (من الإعدادات).
  * لا يُطلب رقم هاتف ولا بريد إلكتروني.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun AccountScreen(container: AppContainer, modifier: Modifier = Modifier) {
+fun AccountScreen(container: AppContainer, modifier: Modifier = Modifier, onDone: () -> Unit = {}) {
     var creating by remember { mutableStateOf(true) }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -66,11 +66,20 @@ fun AccountScreen(container: AppContainer, modifier: Modifier = Modifier) {
             } else {
                 container.messenger.signIn(username, password)
             }
-            busy = false
-            error = result
             if (result == null) {
+                // أثر محلي لكلمة المرور للدخول لاحقًا من «تواصل معنا» دون إنترنت.
+                val secret = password.toCharArray()
+                withContext(Dispatchers.Default) {
+                    runCatching { container.vault.setAccessSecret(secret) }
+                }
+                secret.fill('\u0000')
                 password = ""
                 confirm = ""
+                busy = false
+                onDone()
+            } else {
+                busy = false
+                error = result
             }
         }
     }
@@ -85,7 +94,7 @@ fun AccountScreen(container: AppContainer, modifier: Modifier = Modifier) {
     ) {
         Image(painterResource(R.drawable.dugy_logo), contentDescription = null, modifier = Modifier.size(72.dp))
         Text(
-            if (creating) "أنشئ حسابك في DUGY" else "تسجيل الدخول",
+            if (creating) "إنشاء حساب" else "تسجيل الدخول",
             style = MaterialTheme.typography.titleLarge,
         )
         Text(
@@ -156,18 +165,6 @@ fun AccountScreen(container: AppContainer, modifier: Modifier = Modifier) {
             } else {
                 Text(if (creating) "إنشاء الحساب" else "دخول")
             }
-        }
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                "عند إنشاء الحساب يولّد هاتفك مفاتيح التشفير بنفسه، ويرفع إلى الخادم الأجزاء العامة منها فقط. " +
-                    "المفاتيح الخاصة لا تغادر هذا الهاتف أبدًا. الخادم يرى اسم المستخدم ومن تراسل ومتى، لكنه لا يرى نص الرسائل.",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(14.dp),
-            )
         }
     }
 }

@@ -1,8 +1,6 @@
 package app.dugy.net
 
 import android.content.Context
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ProcessLifecycleOwner
 import app.dugy.data.ChatRepository
 import app.dugy.data.MessageStatus
 import app.dugy.data.SettingsStore
@@ -64,6 +62,11 @@ class Messenger(
     @Volatile private var key: ByteArray? = null
     @Volatile private var store: DugySignalStore? = null
     private var inbox: ListenerRegistration? = null
+    private var watcher: ListenerRegistration? = null
+    private val notified = HashSet<String>()
+
+    /** صحيح ما دامت شاشة المحادثات المخفية معروضة، فلا داعي لتنبيه. */
+    @Volatile var hiddenOpen: Boolean = false
     private val nameCache = HashMap<String, String>()
 
     private val _account = MutableStateFlow<AccountInfo?>(null)
@@ -79,6 +82,7 @@ class Messenger(
     // ---------------- فتح وإغلاق مع القفل ----------------
 
     suspend fun open(dataKey: ByteArray) {
+        stopWatcher()
         val k = dataKey.copyOf()
         key = k
         if (!relay.isConfigured) return
@@ -109,12 +113,35 @@ class Messenger(
 
     /** مسح كل شيء: المفاتيح المحلية وجلسة الخادم. */
     fun wipe() {
+        stopWatcher()
         close()
+        Notifier.cancelAll(context)
         relay.signOut()
         scope.launch(io) {
             file.delete()
             tmp.delete()
         }
+    }
+
+    // ---------------- المراقبة والتطبيق مقفل ----------------
+
+    /**
+     * والتطبيق مقفل لا يمكن قراءة أي شيء، لكن جلسة الحساب باقية؛ فنراقب صندوق الوارد
+     * لنعرف فقط أن شيئًا جديدًا وصل، ونُظهر تنبيه «خاطرة جديدة» دون أي تفاصيل.
+     */
+    fun startWatcher() {
+        if (!relay.isConfigured) return
+        val uid = relay.currentUid ?: return
+        watcher?.remove()
+        watcher = relay.watchInbox(uid) { ids ->
+            val fresh = synchronized(notified) { ids.filter { notified.add(it) } }
+            if (fresh.isNotEmpty()) Notifier.showKhawater(context)
+        }
+    }
+
+    fun stopWatcher() {
+        watcher?.remove()
+        watcher = null
     }
 
     // ---------------- الحساب ----------------
@@ -162,6 +189,7 @@ class Messenger(
     }
 
     fun signOut() {
+        stopWatcher()
         inbox?.remove()
         inbox = null
         relay.signOut()
@@ -172,6 +200,16 @@ class Messenger(
             tmp.delete()
         }
         bump()
+    }
+
+    /**
+     * للتحقق من كلمة المرور عبر الخادم (للحسابات القديمة التي لم يُحفظ لها أثر محلي بعد).
+     * يعيد true/false، أو null إذا تعذّر الاتصال.
+     */
+    suspend fun verifyPasswordOnline(username: String, password: String): Boolean? = try {
+        relay.verifyPassword(username, password)
+    } catch (e: RelayException) {
+        null
     }
 
     private fun validate(username: String, password: String): String? = when {
@@ -300,20 +338,19 @@ class Messenger(
                 username = m.fromName,
                 uid = m.fromUid,
                 messageId = m.id,
-                text = text ?: "تعذّر فك تشفير رسالة وصلت من هذه الجهة. قد تكون أُرسلت إلى جهاز سابق لك.",
+                text = text ?: "تعذّرت قراءة رسالة وصلت من هذه الجهة. قد تكون أُرسلت إلى جهاز سابق لك.",
                 at = m.sentAt,
                 failed = text == null,
             )
             relay.deleteIncoming(acct.uid, m.id)
-            if (text != null) notifyIfBackground(m.fromName, text)
+            if (text != null) notifyIncoming()
         }
         bump()
     }
 
-    private fun notifyIfBackground(sender: String, text: String) {
-        val foreground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-        if (foreground) return
-        Notifier.showMessage(context, settings.current.notificationPreview, sender, text, isTest = false)
+    private fun notifyIncoming() {
+        if (hiddenOpen) return
+        Notifier.showKhawater(context)
     }
 
     private suspend fun replenishKeys() {

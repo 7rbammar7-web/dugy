@@ -6,24 +6,18 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-enum class NotificationPreview {
-    /** الافتراضي: «لديك رسالة جديدة» فقط. */
-    HIDDEN,
-    SENDER_ONLY,
-    /** لا يُفعَّل إلا باختيار صريح وتأكيد من المستخدم. */
-    FULL,
-}
-
+/**
+ * إعدادات غير سرية. الملف مستبعد من النسخ الاحتياطي مع بقية بيانات التطبيق.
+ *
+ * ثابتة دائمًا وليست خيارات للمستخدم: القفل فور مغادرة التطبيق، ومنع لقطات الشاشة،
+ * وإخفاء كل التفاصيل في الإشعارات، ومسح البيانات بعد عشر محاولات فاشلة.
+ */
 data class AppSettings(
     val onboardingDone: Boolean,
-    val autoLockMs: Long,
-    val notificationPreview: NotificationPreview,
-    val secureScreen: Boolean,
-    val wipeAfterFailures: Boolean,
     val favoriteQuotes: Set<Int>,
+    val notificationsAsked: Boolean,
 )
 
-/** إعدادات غير سرية. الملف مستبعد من النسخ الاحتياطي مع بقية بيانات التطبيق. */
 class SettingsStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("settings", Context.MODE_PRIVATE)
     private val _state = MutableStateFlow(read())
@@ -32,15 +26,10 @@ class SettingsStore(context: Context) {
 
     private fun read() = AppSettings(
         onboardingDone = prefs.getBoolean(K_ONBOARDING, false),
-        autoLockMs = prefs.getLong(K_AUTOLOCK, 0L),
-        notificationPreview = prefs.getString(K_NOTIF, null)
-            ?.let { name -> NotificationPreview.entries.firstOrNull { it.name == name } }
-            ?: NotificationPreview.HIDDEN,
-        secureScreen = prefs.getBoolean(K_SECURE, true),
-        wipeAfterFailures = prefs.getBoolean(K_WIPE, false),
         favoriteQuotes = (prefs.getStringSet(K_FAVS, null) ?: emptySet())
             .mapNotNull { it.toIntOrNull() }
             .toSet(),
+        notificationsAsked = prefs.getBoolean(K_NOTIF_ASKED, false),
     )
 
     private fun edit(block: SharedPreferences.Editor.() -> Unit) {
@@ -51,10 +40,7 @@ class SettingsStore(context: Context) {
     }
 
     fun setOnboardingDone(done: Boolean) = edit { putBoolean(K_ONBOARDING, done) }
-    fun setAutoLockMs(ms: Long) = edit { putLong(K_AUTOLOCK, ms) }
-    fun setNotificationPreview(p: NotificationPreview) = edit { putString(K_NOTIF, p.name) }
-    fun setSecureScreen(on: Boolean) = edit { putBoolean(K_SECURE, on) }
-    fun setWipeAfterFailures(on: Boolean) = edit { putBoolean(K_WIPE, on) }
+    fun setNotificationsAsked() = edit { putBoolean(K_NOTIF_ASKED, true) }
 
     fun toggleFavorite(id: Int) {
         val favs = current.favoriteQuotes.toMutableSet()
@@ -68,17 +54,8 @@ class SettingsStore(context: Context) {
     }
 
     companion object {
-        val AUTOLOCK_OPTIONS: List<Pair<Long, String>> = listOf(
-            0L to "فورًا عند مغادرة التطبيق",
-            60_000L to "بعد دقيقة",
-            300_000L to "بعد ٥ دقائق",
-        )
-
         private const val K_ONBOARDING = "onboarding_done"
-        private const val K_AUTOLOCK = "autolock_ms"
-        private const val K_NOTIF = "notif_preview"
-        private const val K_SECURE = "secure_screen"
-        private const val K_WIPE = "wipe_after_failures"
         private const val K_FAVS = "fav_quotes"
+        private const val K_NOTIF_ASKED = "notif_asked"
     }
 }

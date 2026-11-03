@@ -41,7 +41,6 @@ fun LockScreen(container: AppContainer) {
     val context = LocalContext.current
     val activity = remember(context) { context.findFragmentActivity() }
     val scope = rememberCoroutineScope()
-    val settings by container.settings.state.collectAsStateWithLifecycle()
     val biometricEnabled by container.vault.biometricEnabled.collectAsStateWithLifecycle()
 
     var error by remember { mutableStateOf<String?>(null) }
@@ -73,7 +72,7 @@ fun LockScreen(container: AppContainer) {
             BiometricAuth.authenticate(
                 activity = act,
                 title = "فتح DUGY",
-                subtitle = "استخدم بصمتك لفتح المحادثات الخاصة",
+                subtitle = "استخدم بصمتك لفتح التطبيق",
                 negativeText = "استخدام الرمز",
                 cipher = cipher,
                 onSuccess = { authed ->
@@ -106,14 +105,11 @@ fun LockScreen(container: AppContainer) {
     }
 
     val lockedOut = lockoutMs > 0
-    val wipeWarning = if (settings.wipeAfterFailures) {
-        "تنبيه: فعّلتَ مسح البيانات بعد ${app.dugy.security.Vault.WIPE_THRESHOLD} محاولات فاشلة متتالية."
-    } else null
 
     Scaffold { padding ->
         PinEntry(
             title = "DUGY مقفل",
-            subtitle = if (lockedOut) "محاولات كثيرة غير صحيحة. حاول مجددًا بعد ${formatCountdown(lockoutMs)}" else wipeWarning,
+            subtitle = if (lockedOut) "محاولات كثيرة غير صحيحة. حاول مجددًا بعد ${formatCountdown(lockoutMs)}" else null,
             error = error,
             busy = busy,
             enabled = !lockedOut,
@@ -123,7 +119,7 @@ fun LockScreen(container: AppContainer) {
                 scope.launch {
                     val result = withContext(Dispatchers.Default) {
                         try {
-                            container.vault.unlockWithPin(pin, settings.wipeAfterFailures)
+                            container.vault.unlockWithPin(pin)
                         } finally {
                             pin.fill('\u0000')
                         }
@@ -134,14 +130,13 @@ fun LockScreen(container: AppContainer) {
                             error = buildString {
                                 append("رمز غير صحيح.")
                                 result.freeAttemptsLeft?.let { append(" المحاولات المتبقية قبل فرض الانتظار: $it.") }
-                                result.attemptsBeforeWipe?.let { append(" المحاولات المتبقية قبل مسح البيانات: $it.") }
                             }
                             lockoutMs = result.lockoutMs
                         }
                         is UnlockResult.LockedOut -> lockoutMs = result.remainingMs
                         UnlockResult.MustWipe -> container.lockManager.wipeEverything()
                         UnlockResult.StorageError -> error =
-                            "تعذّر الوصول إلى مفاتيح الحماية على هذا الجهاز. قد تحتاج إلى مسح بيانات التطبيق والبدء من جديد."
+                            "تعذّر فتح بيانات التطبيق على هذا الجهاز. قد تحتاج إلى مسح بيانات التطبيق والبدء من جديد."
                     }
                     busy = false
                 }
@@ -161,9 +156,8 @@ fun LockScreen(container: AppContainer) {
     if (showForgot) {
         ConfirmDialog(
             title = "لا يمكن استعادة الرمز",
-            body = "رمز القفل لا يُحفظ على أي خادم، والرسائل المحفوظة على هذا الجهاز مشفّرة به. " +
-                "لا توجد طريقة لاستعادتها من دونه.\n\n" +
-                "الخيار الوحيد هو مسح كل بيانات التطبيق على هذا الجهاز (المحادثات والإعدادات والمفاتيح) والبدء من جديد. " +
+            body = "رمز القفل لا يُحفظ على أي خادم، ولا توجد طريقة لاستعادته.\n\n" +
+                "الخيار الوحيد هو مسح كل بيانات التطبيق على هذا الجهاز والبدء من جديد. " +
                 "لا يمكن التراجع عن ذلك.",
             confirmText = "مسح كل شيء والبدء من جديد",
             destructive = true,

@@ -34,28 +34,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** شريط ثابت يوضح أن هذا الإصدار لا يرسل رسائل مشفرة فعليًا. */
-@Composable
-fun PrototypeBanner(modifier: Modifier = Modifier) {
-    Surface(
-        color = MaterialTheme.colorScheme.tertiaryContainer,
-        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Icon(Icons.Outlined.Info, contentDescription = null, modifier = Modifier.size(20.dp))
-            Text(
-                "نموذج أولي — لا يرسل رسائل مشفرة فعليًا. تبقى الرسائل مشفّرة على هذا الجهاز فقط ولا تصل إلى أحد.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-    }
-}
-
 @Composable
 fun EmptyState(icon: ImageVector, title: String, body: String, modifier: Modifier = Modifier) {
     Column(

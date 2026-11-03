@@ -6,6 +6,7 @@ import app.dugy.e2e.PublicPreKey
 import app.dugy.e2e.PublishedKeys
 import app.dugy.e2e.RemoteBundle
 import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
@@ -101,6 +102,21 @@ class FirebaseRelay(context: Context) {
 
     fun signOut() {
         if (isConfigured) auth.signOut()
+    }
+
+    /** يتحقق من كلمة مرور الحساب الحالي عبر الخادم. يرمي RelayException عند انقطاع الاتصال. */
+    suspend fun verifyPassword(username: String, password: String): Boolean {
+        val user = auth.currentUser ?: return false
+        if (user.email?.substringBefore('@') != username) return false
+        return try {
+            guard { user.reauthenticate(EmailAuthProvider.getCredential(emailFor(username), password)).await() }
+            true
+        } catch (e: RelayException) {
+            when (e.reason) {
+                RelayException.Reason.WRONG_CREDENTIALS, RelayException.Reason.NO_SUCH_USER -> false
+                else -> throw e
+            }
+        }
     }
 
     // ---------------- المفاتيح العامة ----------------
@@ -238,6 +254,18 @@ class FirebaseRelay(context: Context) {
                     }
                     .orEmpty()
                 if (added.isNotEmpty()) onMessages(added)
+            }
+
+    /** يراقب وصول عناصر جديدة إلى الصندوق دون قراءتها أو حذفها؛ يعيد معرّفاتها فقط. */
+    fun watchInbox(uid: String, onNew: (List<String>) -> Unit): ListenerRegistration =
+        db.collection(INBOX).document(uid).collection(MESSAGES)
+            .addSnapshotListener { snap, error ->
+                if (error != null) return@addSnapshotListener
+                val ids = snap?.documentChanges
+                    ?.filter { it.type == DocumentChange.Type.ADDED }
+                    ?.map { it.document.id }
+                    .orEmpty()
+                if (ids.isNotEmpty()) onNew(ids)
             }
 
     /** يحذف الرسالة المشفّرة من الخادم بعد استلامها. */

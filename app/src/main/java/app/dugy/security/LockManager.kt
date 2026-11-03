@@ -1,8 +1,5 @@
 package app.dugy.security
 
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import app.dugy.data.ChatRepository
@@ -16,7 +13,7 @@ enum class AppPhase { ONBOARDING, PIN_SETUP, LOCKED, UNLOCKED }
 
 /**
  * يتحكم في حالة القفل. يُسجَّل مراقبًا لدورة حياة العملية (ProcessLifecycleOwner)،
- * فيُقفل التطبيق فور مغادرته أو بعد المهلة التي اختارها المستخدم.
+ * فيُقفل التطبيق فور مغادرته دائمًا (ليس خيارًا).
  */
 class LockManager(
     private val settings: SettingsStore,
@@ -28,9 +25,10 @@ class LockManager(
     private val _phase = MutableStateFlow(computePhase())
     val phase: StateFlow<AppPhase> = _phase.asStateFlow()
 
-    private val handler = Handler(Looper.getMainLooper())
-    private val lockRunnable = Runnable { lock() }
-    private var backgroundedAt = 0L
+    init {
+        // وهو مقفل: نراقب وصول الجديد فقط لإظهار تنبيه «خاطرة جديدة».
+        if (_phase.value == AppPhase.LOCKED) messenger.startWatcher()
+    }
 
     private fun computePhase(): AppPhase = when {
         !settings.current.onboardingDone -> AppPhase.ONBOARDING
@@ -51,18 +49,17 @@ class LockManager(
     }
 
     fun lock() {
-        handler.removeCallbacks(lockRunnable)
         if (_phase.value == AppPhase.UNLOCKED) {
             messenger.close()
             repository.close()
             vault.lockMemory()
             _phase.value = AppPhase.LOCKED
+            messenger.startWatcher()
         }
     }
 
     /** مسح كل البيانات المحلية والمفاتيح، والعودة إلى البداية. */
     fun wipeEverything() {
-        handler.removeCallbacks(lockRunnable)
         messenger.wipe()
         repository.close()
         repository.deleteFiles()
@@ -72,24 +69,6 @@ class LockManager(
     }
 
     override fun onStop(owner: LifecycleOwner) {
-        if (_phase.value != AppPhase.UNLOCKED) return
-        val timeout = settings.current.autoLockMs
-        if (timeout <= 0L) {
-            lock()
-        } else {
-            backgroundedAt = SystemClock.elapsedRealtime()
-            handler.postDelayed(lockRunnable, timeout)
-        }
-    }
-
-    override fun onStart(owner: LifecycleOwner) {
-        handler.removeCallbacks(lockRunnable)
-        // قد يُجمَّد التطبيق في الخلفية فلا يعمل المؤقت؛ نتحقق من المدة الفعلية عند العودة.
-        if (_phase.value == AppPhase.UNLOCKED && backgroundedAt > 0L &&
-            SystemClock.elapsedRealtime() - backgroundedAt >= settings.current.autoLockMs
-        ) {
-            lock()
-        }
-        backgroundedAt = 0L
+        lock()
     }
 }

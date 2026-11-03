@@ -42,7 +42,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.dugy.AppContainer
 import app.dugy.data.MessageStatus
-import app.dugy.ui.account.AccountScreen
 import app.dugy.ui.components.EmptyState
 import app.dugy.ui.components.NetworkBanner
 import app.dugy.ui.components.formatShort
@@ -56,19 +55,15 @@ fun ConversationsTab(container: AppContainer, modifier: Modifier = Modifier, onO
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             EmptyState(
                 icon = Icons.Outlined.CloudOff,
-                title = "المراسلة غير مفعّلة بعد",
-                body = "لم يُربط التطبيق بخادم المراسلة في هذه النسخة، لذلك لا يمكن إرسال الرسائل أو استقبالها. " +
-                    "لن يدّعي التطبيق أن المراسلة تعمل قبل ذلك. تبقى الخواطر والقفل وبقية الميزات متاحة.",
+                title = "غير متاح",
+                body = "هذه الميزة غير متاحة في هذه النسخة.",
             )
         }
         return
     }
 
     val account by messenger.account.collectAsStateWithLifecycle()
-    if (account == null) {
-        AccountScreen(container, modifier)
-        return
-    }
+    if (account == null) return
 
     val conversations by container.repository.conversations.collectAsStateWithLifecycle()
     val loadError by container.repository.loadError.collectAsStateWithLifecycle()
@@ -84,7 +79,7 @@ fun ConversationsTab(container: AppContainer, modifier: Modifier = Modifier, onO
                 leadingContent = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
                 headlineContent = { Text("تعذّر فك ملف المحادثات المحفوظ") },
                 supportingContent = {
-                    Text("لن يكتب التطبيق فوق الملف الحالي حمايةً لبياناتك. يمكنك مسح البيانات المحلية من إعدادات الخصوصية.")
+                    Text("لن يكتب التطبيق فوق الملف الحالي حمايةً لبياناتك.")
                 },
             )
         }
@@ -94,8 +89,7 @@ fun ConversationsTab(container: AppContainer, modifier: Modifier = Modifier, onO
                 EmptyState(
                     icon = Icons.Outlined.Forum,
                     title = "لا توجد محادثات بعد",
-                    body = "اضغط «محادثة جديدة» واكتب اسم مستخدم صديقك في DUGY. " +
-                        "اسمك أنت: @${account?.username}",
+                    body = "اضغط «محادثة جديدة» واكتب اسم مستخدم صديقك.",
                 )
             }
         } else {
@@ -112,7 +106,7 @@ fun ConversationsTab(container: AppContainer, modifier: Modifier = Modifier, onO
                         supportingContent = {
                             Text(
                                 when {
-                                    security.keyChanged -> "تغيّر مفتاح الأمان لهذه الجهة"
+                                    security.keyChanged -> "تغيّر رمز التحقق لهذه الجهة"
                                     last == null -> "لا رسائل بعد"
                                     last.outgoing && last.status == MessageStatus.FAILED -> "لم تُرسل: ${last.text}"
                                     else -> last.text
@@ -129,7 +123,7 @@ fun ConversationsTab(container: AppContainer, modifier: Modifier = Modifier, onO
                                 when {
                                     security.keyChanged -> Icon(
                                         Icons.Outlined.GppMaybe,
-                                        contentDescription = "تغيّر المفتاح",
+                                        contentDescription = "تغيّر رمز التحقق",
                                         tint = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(18.dp),
                                     )
@@ -193,7 +187,7 @@ fun NewChatDialog(container: AppContainer, onDismiss: () -> Unit, onOpened: (Str
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                     supportingText = {
                         Text(
-                            error ?: "اطلب من صديقك اسم مستخدمه في DUGY. بعد بدء المحادثة طابقا «رمز الأمان» للتأكد من هويته.",
+                            error ?: "اطلب من صديقك اسم مستخدمه. بعد بدء المحادثة طابقا «رمز التحقق» للتأكد من هويته.",
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
