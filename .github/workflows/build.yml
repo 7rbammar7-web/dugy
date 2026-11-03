@@ -1,0 +1,79 @@
+name: Build DUGY
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-dugy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unpack uploaded zip
+        run: |
+          z=$(ls -1 *.zip 2>/dev/null | head -n1 || true)
+          if [ -z "$z" ]; then echo "No zip to unpack"; exit 0; fi
+          rm -rf /tmp/u && mkdir -p /tmp/u
+          unzip -q "$z" -d /tmp/u
+          src=/tmp/u
+          if [ -d /tmp/u/dugy ]; then src=/tmp/u/dugy; fi
+          rm -rf "$src/.git" "$src/.github"
+          git rm -q --cached "$z" || true
+          rm -f "$z"
+          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name .github -exec rm -rf {} +
+          cp -a "$src"/. .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Unpack $z" || echo "Nothing changed"
+          git push
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Keep the same signing key between builds
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: dugy-debug-keystore-v1
+
+      - name: Build and test
+        run: |
+          if [ ! -f gradlew ]; then echo "No project yet" | tee build-log.txt; exit 0; fi
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew --no-daemon assembleDebug testDebugUnitTest 2>&1 | tee build-log.txt
+
+      - name: Publish APK to Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          if [ ! -f "$apk" ]; then echo "No APK"; exit 0; fi
+          cp "$apk" DUGY.apk
+          gh release delete latest -y --cleanup-tag || true
+          gh release create latest DUGY.apk --target "$(git rev-parse HEAD)" --title "DUGY - latest" --notes "Automatic test build."
+
+      - name: Save build log to ci-logs branch
+        if: always()
+        run: |
+          mkdir -p /tmp/logs
+          cp build-log.txt /tmp/logs/ 2>/dev/null || echo "No log" > /tmp/logs/build-log.txt
+          echo "${{ job.status }} $(git rev-parse HEAD) $(date -u)" > /tmp/logs/status.txt
+          cd /tmp/logs
+          git init -q -b ci-logs
+          git add -A
+          git -c user.name=bot -c user.email=bot@users.noreply.github.com commit -q -m "Build log"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs
