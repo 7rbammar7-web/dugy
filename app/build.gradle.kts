@@ -30,6 +30,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // مطلوب لمكتبة libsignal-android.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -74,6 +76,8 @@ dependencies {
     val libsignal = "0.106.1"
     implementation("org.signal:libsignal-android:$libsignal")
     implementation("org.signal:libsignal-client:$libsignal")
+
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     testImplementation("junit:junit:4.13.2")
 
