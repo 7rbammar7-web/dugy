@@ -36,8 +36,8 @@ android {
         applicationId = "app.dugy.messenger"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.3.0"
+        versionCode = 5
+        versionName = "0.3.1"
 
         // معالجات الهواتف فقط؛ نسخ المحاكيات (x86) تضاعف الحجم بلا فائدة.
         ndk {
@@ -45,8 +45,24 @@ android {
         }
     }
 
+    // مفتاح توقيع ثابت محفوظ في المستودع، حتى تُثبَّت كل نسخة جديدة فوق السابقة دون حذفها.
+    // تنبيه: يجب أن يبقى المستودع خاصًا، فمن يملك هذا المفتاح يستطيع توقيع نسخة باسم التطبيق.
+    signingConfigs {
+        create("dugy") {
+            storeFile = file("signing/dugy-signing.p12")
+            storeType = "PKCS12"
+            storePassword = "2J7sihVv8QRKWXRlNrBQ-193"
+            keyAlias = "dugy"
+            keyPassword = "2J7sihVv8QRKWXRlNrBQ-193"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("dugy")
+        }
         release {
+            signingConfig = signingConfigs.getByName("dugy")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
