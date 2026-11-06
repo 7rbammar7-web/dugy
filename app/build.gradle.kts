@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,7 +8,7 @@ plugins {
 
 // عنوان خادم الراسبيري يُقرأ من ملف server.properties في جذر المستودع.
 // إن كان فارغًا يُبنى التطبيق وتبقى المراسلة معطّلة.
-val serverProps = java.util.Properties().apply {
+val serverProps = Properties().apply {
     val f = rootProject.file("server.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
