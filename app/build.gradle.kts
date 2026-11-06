@@ -4,11 +4,13 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-// إعداد Firebase يُقرأ من app/google-services.json إن وُجد. بدونه يُبنى التطبيق
-// وتبقى المراسلة معطّلة مع رسالة توضيحية داخل التطبيق.
-if (file("google-services.json").exists()) {
-    apply(plugin = "com.google.gms.google-services")
+// عنوان خادم الراسبيري يُقرأ من ملف server.properties في جذر المستودع.
+// إن كان فارغًا يُبنى التطبيق وتبقى المراسلة معطّلة.
+val serverProps = java.util.Properties().apply {
+    val f = rootProject.file("server.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
 }
+val serverUrl: String = serverProps.getProperty("url", "").trim()
 
 fun installedNdkVersion(): String? {
     val sdk = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT") ?: return null
@@ -36,8 +38,9 @@ android {
         applicationId = "app.dugy.messenger"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.3.1"
+        versionCode = 6
+        versionName = "0.4.0"
+        buildConfigField("String", "SERVER_URL", "\"$serverUrl\"")
 
         // معالجات الهواتف فقط؛ نسخ المحاكيات (x86) تضاعف الحجم بلا فائدة.
         ndk {
@@ -130,11 +133,8 @@ dependencies {
     implementation("org.signal:libsignal-android:$libsignal")
     implementation("org.signal:libsignal-client:$libsignal")
 
-    // الخادم: Firebase (حسابات + قاعدة بيانات لتمرير الرسائل المشفّرة فقط).
-    implementation(platform("com.google.firebase:firebase-bom:34.0.0"))
-    implementation("com.google.firebase:firebase-auth")
-    implementation("com.google.firebase:firebase-firestore")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
+    // الاتصال بخادم الراسبيري.
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 

@@ -116,8 +116,8 @@ fun NetworkBanner(container: app.dugy.AppContainer, modifier: Modifier = Modifie
     val online by container.messenger.connectivity.online.collectAsStateWithLifecycle()
     val inboxError by container.messenger.inboxError.collectAsStateWithLifecycle()
     val text = when {
-        !online -> "لا يوجد اتصال بالإنترنت. ستبقى الرسائل غير المرسلة هنا، ويمكنك إعادة إرسالها عند عودة الاتصال."
-        inboxError -> "تعذّر الوصول إلى الخادم لاستلام الرسائل. سيُعاد المحاولة تلقائيًا."
+        !online -> "لا يوجد اتصال بالإنترنت. ستبقى رسائلك هنا وتُرسل تلقائيًا عند عودته."
+        inboxError -> "غير متصل بالخادم. تأكد أن Tailscale يعمل. ستُعاد المحاولة تلقائيًا."
         else -> return
     }
     Surface(

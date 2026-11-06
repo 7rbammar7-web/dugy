@@ -364,7 +364,7 @@ private fun MessageBubble(msg: Message, onLongPress: () -> Unit, onRetry: () -> 
 }
 
 private fun statusInfo(status: MessageStatus): Pair<ImageVector, String> = when (status) {
-    MessageStatus.PENDING -> Icons.Outlined.Schedule to "قيد الإرسال"
+    MessageStatus.PENDING -> Icons.Outlined.Schedule to "بانتظار اتصال المستلم"
     MessageStatus.SENT -> Icons.Outlined.Done to "أُرسلت"
     MessageStatus.DELIVERED -> Icons.Outlined.DoneAll to "تم التسليم"
     MessageStatus.FAILED -> Icons.Outlined.ErrorOutline to "فشل الإرسال"

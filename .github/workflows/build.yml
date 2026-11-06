@@ -37,6 +37,18 @@ jobs:
           git commit -q -m "Unpack $z" || echo "Nothing changed"
           git push
 
+      - name: Test the Raspberry Pi server
+        run: |
+          if [ ! -f server/dugy_server.py ]; then exit 0; fi
+          python3 -m pip install --quiet aiohttp
+          python3 server/test_server.py
+          python3 - <<'EOF'
+          t = open('server/install.sh').read()
+          s = open('server/dugy_server.py').read()
+          open('dugy-install.sh', 'w').write(t.replace('@@DUGY_SERVER_PY@@', s.rstrip('\n')))
+          EOF
+          bash -n dugy-install.sh
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -58,7 +70,9 @@ jobs:
           if [ ! -f "$apk" ]; then echo "No APK"; exit 0; fi
           cp "$apk" DUGY.apk
           gh release delete latest -y --cleanup-tag || true
-          gh release create latest DUGY.apk --target "$(git rev-parse HEAD)" --title "DUGY - latest" --notes "Automatic test build."
+          extra=""
+          if [ -f dugy-install.sh ]; then extra="dugy-install.sh"; fi
+          gh release create latest DUGY.apk $extra --target "$(git rev-parse HEAD)" --title "DUGY - latest" --notes "Automatic test build."
 
       - name: Save build log to ci-logs branch
         if: always()

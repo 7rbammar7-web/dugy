@@ -9,7 +9,6 @@ import app.dugy.e2e.E2eEngine
 import app.dugy.e2e.EncryptResult
 import app.dugy.notify.Notifier
 import app.dugy.security.AesGcm
-import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,9 +36,12 @@ data class ContactSecurity(
 )
 
 /**
- * يربط التشفير الطرفي (E2eEngine) بالخادم (FirebaseRelay) وبالمخزن المحلي للمحادثات.
+ * يربط التشفير الطرفي (E2eEngine) بالخادم (ServerRelay) وبالمخزن المحلي للمحادثات.
  *
- * ترتيب الإرسال: نص ← تشفير على الجهاز ← رسالة مشفّرة إلى الخادم. لا يوجد مسار آخر.
+ * ترتيب الإرسال: نص ← تشفير على الجهاز ← طابور الصادر ← الخادم يمرّرها فورًا إلى المستلم.
+ * الخادم لا يحفظ الرسائل؛ إن لم يكن المستلم متصلًا تبقى مشفّرة في طابور الصادر هنا
+ * وتُرسل تلقائيًا حين يتصل. الاتصال بالخادم يبقى قائمًا والتطبيق مقفل أيضًا، فما يصل
+ * يُحفظ مشفّرًا في طابور الوارد ويُفك عند فتح التطبيق.
  * حالة بروتوكول Signal تُحفظ في ملف مشفّر بمفتاح البيانات المحمي برمز القفل،
  * فلا يمكن الإرسال أو الاستقبال والتطبيق مقفل.
  */
@@ -49,7 +51,7 @@ class Messenger(
     private val repository: ChatRepository,
     private val settings: SettingsStore,
 ) {
-    val relay = FirebaseRelay(context)
+    val relay = ServerRelay(context)
     val connectivity = Connectivity(context)
 
     val isConfigured: Boolean get() = relay.isConfigured
@@ -61,9 +63,9 @@ class Messenger(
 
     @Volatile private var key: ByteArray? = null
     @Volatile private var store: DugySignalStore? = null
-    private var inbox: ListenerRegistration? = null
-    private var watcher: ListenerRegistration? = null
-    private val notified = HashSet<String>()
+    private val outbox = Outbox(context)
+    private val inboxQueue = Inbox(context)
+    private val inboxLock = Mutex()
 
     /** صحيح ما دامت شاشة المحادثات المخفية معروضة، فلا داعي لتنبيه. */
     @Volatile var hiddenOpen: Boolean = false
@@ -81,8 +83,12 @@ class Messenger(
 
     // ---------------- فتح وإغلاق مع القفل ----------------
 
+    init {
+        startWatcher()
+        scope.launch { connectivity.online.collect { if (it) relay.reconnectNow() } }
+    }
+
     suspend fun open(dataKey: ByteArray) {
-        stopWatcher()
         val k = dataKey.copyOf()
         key = k
         if (!relay.isConfigured) return
@@ -92,7 +98,9 @@ class Messenger(
         if (uid != null && username != null && loaded != null && loaded.first == uid) {
             store = loaded.second
             _account.value = AccountInfo(uid, username)
-            startInbox(uid)
+            reconcileOutbox()
+            relay.connect(link)
+            scope.launch { processInbox() }
             scope.launch { replenishKeys() }
         } else if (uid != null) {
             // جلسة خادم بلا مفاتيح محلية مطابقة (مثلًا بعد مسح البيانات): نطلب الدخول من جديد.
@@ -102,8 +110,6 @@ class Messenger(
     }
 
     fun close() {
-        inbox?.remove()
-        inbox = null
         store = null
         key?.fill(0)
         key = null
@@ -113,46 +119,94 @@ class Messenger(
 
     /** مسح كل شيء: المفاتيح المحلية وجلسة الخادم. */
     fun wipe() {
-        stopWatcher()
         close()
         Notifier.cancelAll(context)
         relay.signOut()
+        outbox.clear()
+        inboxQueue.clear()
         scope.launch(io) {
             file.delete()
             tmp.delete()
         }
     }
 
-    // ---------------- المراقبة والتطبيق مقفل ----------------
+    // ---------------- الاتصال الحي ----------------
 
-    /**
-     * والتطبيق مقفل لا يمكن قراءة أي شيء، لكن جلسة الحساب باقية؛ فنراقب صندوق الوارد
-     * لنعرف فقط أن شيئًا جديدًا وصل، ونُظهر تنبيه «خاطرة جديدة» دون أي تفاصيل.
-     */
+    /** يبقي الاتصال بالخادم قائمًا ما دام على الهاتف حساب، والتطبيق مقفل أو مفتوح. */
     fun startWatcher() {
-        if (!relay.isConfigured) return
-        val uid = relay.currentUid ?: return
-        watcher?.remove()
-        watcher = relay.watchInbox(uid) { ids ->
-            val fresh = synchronized(notified) { ids.filter { notified.add(it) } }
-            if (fresh.isNotEmpty()) Notifier.showKhawater(context)
+        if (relay.isConfigured && relay.currentUid != null) relay.connect(link)
+    }
+
+    private val unlocked: Boolean get() = key != null && store != null
+
+    // كسول: يُستخدم من init قبل موضعه في الملف.
+    private val link: LinkListener by lazy { createLink() }
+
+    private fun createLink() = object : LinkListener {
+        override fun onConnected() {
+            _inboxError.value = false
+            flushOutbox(null)
+        }
+
+        override fun onDisconnected() {
+            _inboxError.value = true
+        }
+
+        override fun onMessage(m: IncomingEnvelope) {
+            // يُحفظ أولًا ثم يُؤكَّد الاستلام، فلا تضيع الرسالة إن أُغلق التطبيق فجأة.
+            val fresh = inboxQueue.add(m)
+            relay.ack(m.id)
+            if (fresh && !hiddenOpen) Notifier.showKhawater(context)
+            if (unlocked) scope.launch { processInbox() }
+        }
+
+        override fun onDelivered(id: String) = settle(id, OutItem.DELIVERED)
+
+        override fun onOffline(id: String, toUid: String) = Unit
+
+        override fun onOnline(uid: String) = flushOutbox(uid)
+
+        override fun onUnknown(id: String) = settle(id, OutItem.FAILED)
+    }
+
+    private fun settle(id: String, state: Int) {
+        val item = outbox.find(id) ?: return
+        if (unlocked) {
+            val status = if (state == OutItem.DELIVERED) MessageStatus.DELIVERED else MessageStatus.FAILED
+            repository.updateStatus(item.conversationId, id, status)
+            outbox.remove(id)
+        } else {
+            outbox.setState(id, state)
         }
     }
 
-    fun stopWatcher() {
-        watcher?.remove()
-        watcher = null
+    /** يرسل ما في طابور الصادر (لمستلم واحد أو للجميع). المشفّر جاهز، فلا يلزم فتح التطبيق. */
+    private fun flushOutbox(toUid: String?) {
+        if (!relay.connected) return
+        outbox.pending()
+            .filter { toUid == null || it.toUid == toUid }
+            .forEach { relay.send(it.toUid, it.id, it.envelope, it.sentAt) }
+    }
+
+    /** بعد فتح القفل: نحدّث حالة الرسائل التي سُلِّمت أو فشلت والتطبيق مقفل. */
+    private fun reconcileOutbox() {
+        outbox.items().filter { it.state != OutItem.PENDING }.forEach { item ->
+            val status = if (item.state == OutItem.DELIVERED) MessageStatus.DELIVERED else MessageStatus.FAILED
+            repository.updateStatus(item.conversationId, item.id, status)
+            outbox.remove(item.id)
+        }
     }
 
     // ---------------- الحساب ----------------
 
     /** يعيد null عند النجاح، أو رسالة خطأ بالعربية. */
-    suspend fun createAccount(rawUsername: String, password: String): String? {
-        val username = FirebaseRelay.normalizeUsername(rawUsername)
+    suspend fun createAccount(rawUsername: String, password: String, invite: String): String? {
+        val username = ServerRelay.normalizeUsername(rawUsername)
         validate(username, password)?.let { return it }
+        if (invite.isBlank()) return "اكتب رمز الدعوة."
         if (key == null) return "التطبيق مقفل."
         return try {
-            val uid = relay.signUp(username, password)
+            val uid = relay.signUp(username, password, invite.trim())
             setUpDevice(uid, username)
             null
         } catch (e: RelayException) {
@@ -161,8 +215,8 @@ class Messenger(
     }
 
     suspend fun signIn(rawUsername: String, password: String): String? {
-        val username = FirebaseRelay.normalizeUsername(rawUsername)
-        if (!FirebaseRelay.isValidUsername(username) || password.isEmpty()) return "اكتب اسم المستخدم وكلمة المرور."
+        val username = ServerRelay.normalizeUsername(rawUsername)
+        if (!ServerRelay.isValidUsername(username) || password.isEmpty()) return "اكتب اسم المستخدم وكلمة المرور."
         if (key == null) return "التطبيق مقفل."
         return try {
             val uid = relay.signIn(username, password)
@@ -184,15 +238,14 @@ class Messenger(
         mutex.withLock { store = s }
         persist(uid)
         _account.value = AccountInfo(uid, username)
-        startInbox(uid)
+        relay.connect(link)
         bump()
     }
 
     fun signOut() {
-        stopWatcher()
-        inbox?.remove()
-        inbox = null
         relay.signOut()
+        outbox.clear()
+        inboxQueue.clear()
         store = null
         _account.value = null
         scope.launch(io) {
@@ -213,7 +266,7 @@ class Messenger(
     }
 
     private fun validate(username: String, password: String): String? = when {
-        !FirebaseRelay.isValidUsername(username) ->
+        !ServerRelay.isValidUsername(username) ->
             "اسم المستخدم من 3 إلى 20 حرفًا: حروف إنجليزية صغيرة أو أرقام أو _ فقط."
         password.length < 8 -> "كلمة المرور 8 أحرف على الأقل."
         else -> null
@@ -224,7 +277,10 @@ class Messenger(
         RelayException.Reason.WEAK_PASSWORD -> "كلمة المرور ضعيفة. اختر كلمة أطول."
         RelayException.Reason.WRONG_CREDENTIALS, RelayException.Reason.NO_SUCH_USER ->
             "اسم المستخدم أو كلمة المرور غير صحيحة."
-        RelayException.Reason.NETWORK -> "لا يوجد اتصال بالخادم. تحقق من الإنترنت وحاول مجددًا."
+        RelayException.Reason.BAD_INVITE -> "رمز الدعوة غير صحيح أو انتهت صلاحيته."
+        RelayException.Reason.RATE_LIMITED -> "محاولات كثيرة. انتظر ربع ساعة ثم حاول مجددًا."
+        RelayException.Reason.UNAUTHORIZED -> "انتهت الجلسة. سجّل الدخول من جديد."
+        RelayException.Reason.NETWORK -> "لا يوجد اتصال بالخادم. تحقق من الإنترنت وتشغيل Tailscale."
         RelayException.Reason.OTHER -> "تعذّر الاتصال بالخادم. حاول مجددًا لاحقًا."
     }
 
@@ -233,8 +289,8 @@ class Messenger(
     /** يبحث عن اسم المستخدم على الخادم ويفتح محادثة معه. يعيد معرّف المحادثة أو رسالة خطأ. */
     suspend fun startConversation(rawUsername: String): Result<String> {
         val acct = _account.value ?: return Result.failure(IllegalStateException("سجّل الدخول أولًا."))
-        val username = FirebaseRelay.normalizeUsername(rawUsername)
-        if (!FirebaseRelay.isValidUsername(username)) {
+        val username = ServerRelay.normalizeUsername(rawUsername)
+        if (!ServerRelay.isValidUsername(username)) {
             return Result.failure(IllegalArgumentException("اسم مستخدم غير صالح."))
         }
         if (username == acct.username) return Result.failure(IllegalArgumentException("هذا اسم حسابك أنت."))
@@ -282,7 +338,8 @@ class Messenger(
         val s = store ?: return MessageStatus.FAILED
         val contact = repository.conversation(conversationId)?.contact ?: return MessageStatus.FAILED
         val name = contact.handle
-        val uid = contact.uid.ifEmpty { relay.lookupUid(name) ?: return MessageStatus.FAILED }
+        // نسأل الخادم دائمًا عن المعرّف، فالمعرّفات المحفوظة من خادم سابق لا تصلح.
+        val uid = nameCache[name] ?: relay.lookupUid(name)?.also { nameCache[name] = it } ?: return MessageStatus.FAILED
 
         val published = relay.publishedIdentity(uid)
         val bundle = if (!s.containsSession(E2eEngine.address(name))) relay.fetchBundle(uid) else null
@@ -295,8 +352,10 @@ class Messenger(
 
         return when (result) {
             is EncryptResult.Ok -> {
-                relay.send(acct.uid, acct.username, uid, messageId, result.envelope)
-                MessageStatus.SENT
+                val item = OutItem(messageId, conversationId, uid, System.currentTimeMillis(), result.envelope)
+                outbox.add(item)
+                relay.send(item.toUid, item.id, item.envelope, item.sentAt)
+                MessageStatus.PENDING
             }
             EncryptResult.KeyChanged -> {
                 bump()
@@ -308,33 +367,21 @@ class Messenger(
 
     // ---------------- الاستقبال ----------------
 
-    private fun startInbox(uid: String) {
-        inbox?.remove()
-        _inboxError.value = false
-        inbox = relay.listenInbox(
-            uid,
-            onMessages = { list -> scope.launch { receive(list) } },
-            onError = { _inboxError.value = true },
-        )
-    }
-
-    private suspend fun receive(list: List<IncomingEnvelope>) {
-        val acct = _account.value ?: return
-        for (m in list) {
-            val s = store ?: return
-            // نتحقق أن اسم المرسل المعلن يخص الحساب الذي أرسل فعلًا (قواعد الخادم تضمن المعرّف).
-            val realUid = nameCache[m.fromName] ?: runCatching { relay.lookupUid(m.fromName) }.getOrNull()
-            if (realUid == null || realUid != m.fromUid) {
-                relay.deleteIncoming(acct.uid, m.id)
+    /** يفك ما وصل إلى طابور الوارد ويضيفه إلى المحادثات. يتطلب أن يكون التطبيق مفتوحًا. */
+    private suspend fun processInbox() = inboxLock.withLock {
+        val acct = _account.value ?: return@withLock
+        for (m in inboxQueue.items().toList()) {
+            val s = store ?: return@withLock
+            if (m.fromUid == acct.uid || m.fromName.isEmpty()) {
+                inboxQueue.remove(m)
                 continue
             }
-            nameCache[m.fromName] = realUid
-
+            nameCache[m.fromName] = m.fromUid
             val text = mutex.withLock {
                 runCatching { E2eEngine.decrypt(s, acct.username, m.fromName, m.envelope) }.getOrNull()
             }
             persist(acct.uid)
-            repository.addIncoming(
+            val added = repository.addIncoming(
                 username = m.fromName,
                 uid = m.fromUid,
                 messageId = m.id,
@@ -342,15 +389,11 @@ class Messenger(
                 at = m.sentAt,
                 failed = text == null,
             )
-            relay.deleteIncoming(acct.uid, m.id)
-            if (text != null) notifyIncoming()
+            // إن أُقفل التطبيق أثناء المعالجة تبقى الرسالة في الطابور لفتحها لاحقًا.
+            if (added == null) return@withLock
+            inboxQueue.remove(m)
         }
         bump()
-    }
-
-    private fun notifyIncoming() {
-        if (hiddenOpen) return
-        Notifier.showKhawater(context)
     }
 
     private suspend fun replenishKeys() {
@@ -385,7 +428,7 @@ class Messenger(
         val s = store ?: return null
         var remote = s.identityOf(username)
         if (remote == null) {
-            val resolvedUid = uid.ifEmpty { relay.lookupUid(username) ?: return null }
+            val resolvedUid = nameCache[username] ?: relay.lookupUid(username) ?: return null
             val published = relay.publishedIdentity(resolvedUid) ?: return null
             mutex.withLock {
                 s.saveIdentity(E2eEngine.address(username), org.signal.libsignal.protocol.IdentityKey(published))

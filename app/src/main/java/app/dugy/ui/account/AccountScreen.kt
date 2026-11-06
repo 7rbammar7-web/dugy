@@ -49,6 +49,7 @@ fun AccountScreen(container: AppContainer, modifier: Modifier = Modifier, onDone
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
+    var invite by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -62,7 +63,7 @@ fun AccountScreen(container: AppContainer, modifier: Modifier = Modifier, onDone
         error = null
         scope.launch {
             val result = if (creating) {
-                container.messenger.createAccount(username, password)
+                container.messenger.createAccount(username, password, invite)
             } else {
                 container.messenger.signIn(username, password)
             }
@@ -147,6 +148,17 @@ fun AccountScreen(container: AppContainer, modifier: Modifier = Modifier, onDone
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = invite,
+                onValueChange = { invite = it.take(20).uppercase(); error = null },
+                label = { Text("رمز الدعوة") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Characters,
+                    autoCorrectEnabled = false,
+                ),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
